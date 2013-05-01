@@ -66,25 +66,10 @@ Reader.notTerminal = function(c) {
 Reader.prototype = {
     constructor: Reader,
 
-    builtinPrefix: '',
-
-    makeList: function(array, position) {
-	// list.metadata = { 'source-position': position };
-	return array;
+    makeList: function(list, position) {
+	list['source-position'] = position
+	return list
     },
-
-    makeSymbol: function(string, position) {
-	var symbol = new Symbol(string);
-	// symbol.metadata = { 'source-position' : position };
-	return symbol;
-    },
-
-    makeBuiltinSymbol: function(string, position) {
-	var symbol = new Symbol(this.builtinPrefix + string);
-	// symbol.metadata = { 'source-position' : position };
-	return symbol;
-    },
-
 
     reset: function(input, origin) {
 	this.input  = input;
@@ -187,7 +172,7 @@ Reader.prototype = {
 	var position = this.getPosition();
 	this.pop();
 	return this.makeList(
-	    [this.makeBuiltinSymbol('quote', position),
+	    [Symbol.coreSymbol('quote', position),
 	     this.readSexp()], 
 	    position);
     },
@@ -196,7 +181,7 @@ Reader.prototype = {
 	var position = this.getPosition();
 	this.pop();
 	return this.makeList(
-	    [this.makeBuiltinSymbol('quasiquote', position),
+	    [Symbol.coreSymbol('quasiquote'),
 	     this.readSexp()],
 	    position);		
     },
@@ -212,9 +197,9 @@ Reader.prototype = {
 	}				
 
 	return this.makeList(
-	    [this.makeBuiltinSymbol(name, position),
-	     this.readSexp()],
-	    position);		
+	    [Symbol.coreSymbol(name), this.readSexp()]
+	)
+
     },
 
     readList: function() {
@@ -273,6 +258,17 @@ Reader.prototype = {
 	}
     },
 
+    parseSymbol: function(string, position) {
+	if (string[0] == ":") {
+	    return Keyword(string.substring(1))
+	}
+
+	else {
+	    return new Symbol(null, string)
+	}
+	
+    },
+
     readAtom: function() {
 	var position = this.getPosition();
 	var string   = this.popWhile(Reader.notTerminal);
@@ -287,9 +283,10 @@ Reader.prototype = {
 	if (/\d|(-\d)/.test(string[0])) {
 	    return this.parseNumber(string, position);
 	} else {
-	    return this.makeSymbol(string, position);
+	    return this.parseSymbol(string, position);
 	}
 
     }    
 
 };
+

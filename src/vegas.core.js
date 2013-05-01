@@ -13,11 +13,18 @@ function Keyword(name) {
 
 Keyword.interns = {}
 
+Keyword.prototype.toString = function() {
+    return this.name
+}
+
 function Symbol(namespace, name) {
     this.namespace = namespace;
     this.name      = name;
     this.key       = "#" + name;
-    this.tag       = null;
+}
+
+Symbol.prototype.toString = function() {
+    return this.name
 }
 
 Symbol.coreSymbol = function(name) {
@@ -31,11 +38,10 @@ Symbol.prototype.applyTag = function(tag) {
 }
 
 Symbol.prototype.reify = function() {
-    return new Symbol(this.name)
+    return new Symbol(null, this.name)
 }
 
 function TaggedSymbol(symbol, tag) {
-    this.symbol = symbol
     this.name   = symbol.name
     this.key    = tag + symbol.key
     this.tag    = tag
@@ -50,7 +56,7 @@ TaggedSymbol.prototype.applyTag = function(tag) {
 }
 
 TaggedSymbol.prototype.reify = function() {
-    return new Symbol(this.key)
+    return new Symbol(null, this.key)
 }
 
 /*
@@ -83,19 +89,89 @@ Tag.prototype.sanitize = function(sexp) {
 }
 
 /* 
-   Env objects are linked lists of plain javascript objects.
-   They have special support for resolving symbols that have
+   extensible dictionaries
+*/
+
+function Dict(bindings, parent) {
+    this.bindings = bindings
+    this.parent   = parent
+}
+
+Dict.create = function() {
+    return new Dict({}, null)
+}
+
+Dict.prototype.extend = function() {
+    return new Dict({}, this)
+}
+
+Dict.prototype.get = function(key, notFound) {
+    var dict = this;
+    while (dict) {
+	if (key in dict.bindings) {
+	    return dict.bindings[key]
+	} else {
+	    dict = dict.parent
+	}
+    }
+    return notFound
+}
+
+Dict.prototype.put = function(key, val) {
+    this.bindings[key] = val    
+    return this
+}
+
+/* 
+   Env objects are wrappers around dictionaries
+   with special support for resolving symbols that have
    been tagged during macroexpansion.
 */
 
-function Env(bindings) {
-    this.bindings = bindings;
+function Env(dict) {
+    this.dict = dict
 }
 
 Env.registry = {}
+Env.exports  = {}
+
+Env.addExport = function(namespace, symbol) {
+    var list = Env.exports[namespace] || (Env.exports[namespace] = [])
+    list.push(symbol)
+}
+
+Env.getExports = function(namespace) {
+    return Env.exports[namespace]
+}
+
+// for now we won't worry about loading modules
+// since anything predefined will not require IO
 
 Env.find = function(name) {
-    return Env.registry[name] || (Env.registry[name] = new Env({}, null))
+    if (name in Env.registry) {
+	return Env.registry[name]
+    } else {
+	return Env.load(name)
+    }    
+}
+
+Env.load = function(name) {
+    throw Error('Env.load not implemented')
+}
+
+Env.createEmpty = function() {
+    return new Env(Dict.create())
+}
+
+Env.findOrCreate = function(name, empty) {
+    return Env.registry[name] || Env.create(name, empty)
+}
+
+Env.create = function(name, notEvenRequire) {
+    var env = new Env(Dict.create())
+    if (!notEvenRequire) { env.put(new Symbol(null, 'require'), 'require') }	
+    Env.registry[name] = env
+    return env
 }
 
 Env.toKey = function(obj) {
@@ -118,18 +194,16 @@ Env.toKey = function(obj) {
 
 }
 
+Env.prototype.extend = function() {
+    return new Env(this.dict.extend())
+}
+
 Env.prototype._get = function(key, notFound) {
-    if (key in this.bindings) {
-	return this.bindings[key]
-    } else if (this.parent) {
-	return this.parent._get(key)
-    } else {
-	return notFound
-    }
+    return this.dict.get(key, notFound)
 }
 
 Env.prototype._put = function(key, val) {
-    this.bindings[key] = val
+    this.dict.put(key, val)
     return this
 }
 
@@ -162,3 +236,17 @@ Env.prototype.get = function(obj, notFound) {
 Env.prototype.put = function(obj, val) {
     return this._put(Env.toKey(obj), val)
 }
+
+// initialize built-in namespaces
+
+var base = Env.create('vegas', true)
+
+var specialFormNames = [
+    'define', 'define-macro',
+    'fun', 'do', 'if', 'let', 'letrec', 'unwind-protect',
+    'set', 'block', 'loop', 'return-from', 'throw', 'js*'
+].forEach(function(name) {
+    var symbol = new Symbol(null, name)
+    base.put(symbol, name)    
+    Env.addExport('vegas', symbol)
+})

@@ -3,7 +3,12 @@ var path = require('path')
 
 SRC_DIR    = 'src'
 OUTPUT_DIR = ''
-TARGETS    = ['vegas.core.js', 'vegas.expander.js']
+TARGETS    = [
+    'vegas.core.js', 
+    'vegas.expander.js', 
+    'vegas.reader.js',
+    'vegas.main.js'
+]
 
 var buf = []
 

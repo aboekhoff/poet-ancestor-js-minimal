@@ -15,11 +15,18 @@ function Keyword(name) {
 
 Keyword.interns = {}
 
+Keyword.prototype.toString = function() {
+    return this.name
+}
+
 function Symbol(namespace, name) {
     this.namespace = namespace;
     this.name      = name;
     this.key       = "#" + name;
-    this.tag       = null;
+}
+
+Symbol.prototype.toString = function() {
+    return this.name
 }
 
 Symbol.coreSymbol = function(name) {
@@ -33,11 +40,10 @@ Symbol.prototype.applyTag = function(tag) {
 }
 
 Symbol.prototype.reify = function() {
-    return new Symbol(this.name)
+    return new Symbol(null, this.name)
 }
 
 function TaggedSymbol(symbol, tag) {
-    this.symbol = symbol
     this.name   = symbol.name
     this.key    = tag + symbol.key
     this.tag    = tag
@@ -52,7 +58,7 @@ TaggedSymbol.prototype.applyTag = function(tag) {
 }
 
 TaggedSymbol.prototype.reify = function() {
-    return new Symbol(this.key)
+    return new Symbol(null, this.key)
 }
 
 /*
@@ -85,19 +91,89 @@ Tag.prototype.sanitize = function(sexp) {
 }
 
 /* 
-   Env objects are linked lists of plain javascript objects.
-   They have special support for resolving symbols that have
+   extensible dictionaries
+*/
+
+function Dict(bindings, parent) {
+    this.bindings = bindings
+    this.parent   = parent
+}
+
+Dict.create = function() {
+    return new Dict({}, null)
+}
+
+Dict.prototype.extend = function() {
+    return new Dict({}, this)
+}
+
+Dict.prototype.get = function(key, notFound) {
+    var dict = this;
+    while (dict) {
+	if (key in dict.bindings) {
+	    return dict.bindings[key]
+	} else {
+	    dict = dict.parent
+	}
+    }
+    return notFound
+}
+
+Dict.prototype.put = function(key, val) {
+    this.bindings[key] = val    
+    return this
+}
+
+/* 
+   Env objects are wrappers around dictionaries
+   with special support for resolving symbols that have
    been tagged during macroexpansion.
 */
 
-function Env(bindings) {
-    this.bindings = bindings;
+function Env(dict) {
+    this.dict = dict
 }
 
 Env.registry = {}
+Env.exports  = {}
+
+Env.addExport = function(namespace, symbol) {
+    var list = Env.exports[namespace] || (Env.exports[namespace] = [])
+    list.push(symbol)
+}
+
+Env.getExports = function(namespace) {
+    return Env.exports[namespace]
+}
+
+// for now we won't worry about loading modules
+// since anything predefined will not require IO
 
 Env.find = function(name) {
-    return Env.registry[name] || (Env.registry[name] = new Env({}, null))
+    if (name in Env.registry) {
+	return Env.registry[name]
+    } else {
+	return Env.load(name)
+    }    
+}
+
+Env.load = function(name) {
+    throw Error('Env.load not implemented')
+}
+
+Env.createEmpty = function() {
+    return new Env(Dict.create())
+}
+
+Env.findOrCreate = function(name, empty) {
+    return Env.registry[name] || Env.create(name, empty)
+}
+
+Env.create = function(name, notEvenRequire) {
+    var env = new Env(Dict.create())
+    if (!notEvenRequire) { env.put(new Symbol(null, 'require'), 'require') }	
+    Env.registry[name] = env
+    return env
 }
 
 Env.toKey = function(obj) {
@@ -120,18 +196,16 @@ Env.toKey = function(obj) {
 
 }
 
+Env.prototype.extend = function() {
+    return new Env(this.dict.extend())
+}
+
 Env.prototype._get = function(key, notFound) {
-    if (key in this.bindings) {
-	return this.bindings[key]
-    } else if (this.parent) {
-	return this.parent._get(key)
-    } else {
-	return notFound
-    }
+    return this.dict.get(key, notFound)
 }
 
 Env.prototype._put = function(key, val) {
-    this.bindings[key] = val
+    this.dict.put(key, val)
     return this
 }
 
@@ -165,6 +239,20 @@ Env.prototype.put = function(obj, val) {
     return this._put(Env.toKey(obj), val)
 }
 
+// initialize built-in namespaces
+
+var base = Env.create('vegas', true)
+
+var specialFormNames = [
+    'define', 'define-macro',
+    'fun', 'do', 'if', 'let', 'letrec', 'unwind-protect',
+    'set', 'block', 'loop', 'return-from', 'throw', 'js*'
+].forEach(function(name) {
+    var symbol = new Symbol(null, name)
+    base.put(symbol, name)    
+    Env.addExport('vegas', symbol)
+})
+
 // END vegas.core.js
 
 // BEGIN vegas.expander.js
@@ -182,10 +270,32 @@ function Expander(namespace, symbols, labels) {
     this.labels    = labels;
 } 
 
+Expander.prototype.extendSymbols = function() {
+    return new Expander(this.namespace, this.symbols.extend(), this.labels)
+}
+
+Expander.prototype.extendLabels = function() {
+    return new Expander(this.namespace, this.symbols, this.labels.extend())
+}
+
 Expander.prototype.maybeResolveToMacro = function(sexp) {
+    if (sexp instanceof Array && sexp[0] instanceof Symbol) {
+	var denotation = this.symbols.get(sexp[0])	
+	if (typeof denotation == 'function') {
+	    return denotation
+	} 	    	
+    }
+    return null
 }
 
 Expander.prototype.maybeResolveToSpecialForm = function(sexp) {
+    if (sexp instanceof Array && sexp[0] instanceof Symbol) {
+	var denotation = this.symbols.get(sexp[0])	
+	if (typeof denotation == 'string') {
+	    return denotation
+	} 	    	
+    }
+    return null
 }
 
 Expander.prototype.maybeResolveToDo = function(sexp) {
@@ -201,16 +311,13 @@ Expander.prototype.maybeResolveToDefineMacro = function(sexp) {
 }
 
 Expander.prototype.macroexpand1 = function(sexp) {
-    if (sexp instanceof Array) {
-	var macro = this.maybeResolveToMacro(sexp[0])
-	if (macro) { return macro(sexp, this) }
-    }   
-    return sexp
+    var macro = this.maybeResolveToMacro(sexp)
+    return macro ? macro(sexp, this) : sexp
 }
 
 Expander.prototype.macroexpand = function(sexp) {
     var _sexp = this.macroexpand1(sexp)
-    return sexp == _sexp ? _sexp : this.macroexpand(_sexp)
+    return sexp === _sexp ? _sexp : this.macroexpand(_sexp)
 }
 
 Expander.prototype.expandSexps = function(sexps) {
@@ -262,25 +369,28 @@ Expander.prototype.bindGlobal = function(symbol) {
     var symbols         = Env.find(namespace)
     var reifiedSymbol   = symbol.reify()
     var qualifiedSymbol = new Symbol(namespace, reifiedSymbol.name)
+
     symbols.put(symbol, qualifiedSymbol)
+    symbols.put(reifiedSymbol, qualifiedSymbol)
+    Env.addExport(namespace, reifiedSymbol)
     return qualifiedSymbol
 }
 
 Expander.prototype.bindLocal = function(symbol) {
     var reifiedSymbol = symbol.reify()
-    symbols.put(symbol, reifiedSymbol)
+    this.symbols.put(symbol, reifiedSymbol)
     return reifiedSymbol
 }
 
 Expander.prototype.expandArray = function(sexp) {
-    var sf = this.maybeResolveToSpecialForm(sexp[0])
-    return sf ? this.expandSpecialForm(sf, sexp) : this.expandCall(sexp)
+    var sf = this.maybeResolveToSpecialForm(sexp)
+    return sf ? 
+	this.expandSpecialForm(sf, sexp) : 
+	this.expandCall(sexp[0], sexp.slice(1))
 }
 
 Expander.prototype.expandCall = function(callee, args) {
-    return [Symbol.coreSymbol('call'), 
-	    this.expandSexp(callee), 
-	    this.expandSexps(args)]
+    return [this.expandSexp(callee)].concat(this.expandSexps(args))
 }
 
 Expander.prototype.expandBody = function(body) {
@@ -288,8 +398,8 @@ Expander.prototype.expandBody = function(body) {
     var output = []
 
     while (input.length > 0) {
-	var sexp = input.unshift()
-	if (this.maybeResolveToBegin(sexp)) {
+	var sexp = input.shift()
+	if (this.maybeResolveToDo(sexp)) {
 	    input = sexp.slice(1).concat(input)
 	} else {
 	    output.push(this.expandSexp(sexp))
@@ -304,16 +414,6 @@ Expander.prototype.expandBody = function(body) {
 
 }
 
-Expander.prototype.expandCond = function(clauses) {
-    var _clauses = []
-    for (var i=0; i<clauses.length; i++) {
-	var test       = this.expandSexp(clauses[i][0])
-	var consequent = this.expandSexp(clauses[i][1])
-	_clauses.push([test, consequent])
-    }
-    return [Symbol.coreSymbol('cond')].concat(_clauses)
-}
-
 Expander.prototype.expandFn = function(args, body) {
     var exp   = this.extendSymbols()
     var _args = []
@@ -321,7 +421,7 @@ Expander.prototype.expandFn = function(args, body) {
 	_args[i] = exp.bindLocal(args[i])
     }
     var _body = exp.expandBody(body)
-    return [Symbol.coreSymbol('fn*'), 
+    return [Symbol.coreSymbol('fun'), 
 	    _args, 
 	    _body]
 }
@@ -366,6 +466,14 @@ Expander.prototype.expandLetrec = function(bindings, body) {
 
 }
 
+Expander.prototype.expandLabel = function(label) {
+    if (this.labels.get(label)) {
+	return label
+    } else {
+	throw Error('label: ' + label + ' is not in scope')
+   }
+}
+
 Expander.prototype.expandUnwindProtect = function(clauses) {
     // FIXME
 }
@@ -373,14 +481,17 @@ Expander.prototype.expandUnwindProtect = function(clauses) {
 Expander.prototype.expandSpecialForm = function(name, sexp) {
     switch(name) {
 
-    case 'fn*':         
+    case 'fun':         
 	return this.expandFn(sexp[1], sexp.slice(2))
 
     case 'do':
 	return this.expandBody(sexp.slice(1))
 
-    case 'cond':
-	return this.expandCond(sexp.slice(1))
+    case 'if':
+	return [Symbol.coreSymbol('if'),
+		this.expandSexp(sexp[1]),
+		this.expandSexp(sexp[2]),
+		this.expandSexp(sexp[3])]
 
     case 'let':        	
 	return this.expandLet(sexp[1], sexp.slice(2))
@@ -391,9 +502,6 @@ Expander.prototype.expandSpecialForm = function(name, sexp) {
     case 'unwind-protect':
 	return this.expandUnwindProtect(sexp.slice(1))
 
-    case 'call':
-	return this.expandCall(sexp[1], sexp.slice(2))
-
     case 'set':        
 	return [Symbol.coreSymbol('set'), 
 		this.expandSexp(sexp[1]),
@@ -403,16 +511,16 @@ Expander.prototype.expandSpecialForm = function(name, sexp) {
 	var exp   = this.extendLabels()
 	var label = exp.bindLabel(sexp[1])
 	var body  = exp.expandBody(sexp.slice(2))
-	return [exp.coreSymbol('block'), label, body]
+	return [Symbol.coreSymbol('block'), label, body]
 	
     case 'loop':
 	var exp = this.extendLabels()
 	exp.bindLabel(null)
-	return [exp.coreSymbol('loop'), 
+	return [Symbol.coreSymbol('loop'), 
 	        exp.expandBody(sexp.slice(1))]
 
     case 'return-from':
-	return [Symbol.coreSymbol('return-from'),
+	return [Symbol.coreSymbol('return-from'),		
 		this.expandLabel(sexp[1]),
 		this.expandSexp(sexp[2])]
 
@@ -423,10 +531,458 @@ Expander.prototype.expandSpecialForm = function(name, sexp) {
     case 'js*': 
 	return [Symbol.coreSymbol('js*'), sexp[1]]
 
+    case 'require':
+	var options   = {}
+	var namespace = '' + sexp[1]
+
+	for (var i=2; i<sexp.length; i+=2) {
+	    options[sexp[i]] = sexp[i+1]
+	}
+
+	options.prefix  = options.prefix || ""
+
+	if (options.only) {
+	    var names = {}
+	    options.only.forEach(function(x) {names[x] = true })
+	    var accept = function(sym) {
+		return !!names[sym]
+	    }
+	}
+
+	else if (options.exclude) {	    
+	    var names = {}
+	    options.except.forEach(function(x) {name[x] = true})
+	    var accept = function(sym) {
+		return !names[sym]
+	    }
+	}
+
+	else {
+	    var accept = function(x) { return true }
+	}
+
+	var env     = Env.find(namespace)
+	var exports = Env.getExports(namespace)
+
+	for (var i=0; i<exports.length; i++) {	    
+	    var symbol = exports[i]
+	    if (accept(symbol)) {
+		var denotation = env.get(symbol)
+		var alias      = new Symbol(null, options.prefix + symbol)
+		this.symbols.put(alias, denotation)
+	    }	    
+	}
+
+	return namespace + " required"
+
+    }
+
+}
+
+
+
+// END vegas.expander.js
+
+// BEGIN vegas.reader.js
+
+// FIXME (add back support for qualified symbols and keywords)
+
+function Position(offset, line, column, origin) {
+    this.offset = offset;
+    this.line   = line;
+    this.column = column;
+    this.origin = origin;
+}
+
+Position.prototype.toString = function() {
+    return "line "   + this.line   + ", " +
+	"column " + this.column + ", " +
+	"at "     + (this.origin || "unknown location");
+};
+
+function Reader() {	
+    this.input  = null;
+    this.offset = 0;
+    this.line   = 1;
+    this.column = 1;
+    this.origin = "unknown";
+}
+
+Reader.create = function(input, origin) {
+    var reader   = new Reader();
+    if (input)  { reader.input  = input }
+    if (origin) { reader.origin = origin }
+    return reader;
+}
+
+Reader.hexRegex    = /0(x|X)[0-9a-fA-F]+/;
+Reader.octRegex    = /0[0-7]+/;
+Reader.intRegex    = /[0-9]+/;
+Reader.floatRegex  = /[0-9]+\.[0-9]+/;
+Reader.binaryRegex = /0(b|B)[01]+/;
+
+Reader.escapeMap = {
+    'n'  : '\n',
+    'r'  : '\r',
+    'f'  : '\f',
+    'b'  : '\b',
+    't'  : '\t',
+    '"'  : '"',
+    '\\' : '\\'
+};
+
+Reader.notTerminal = function(c) {
+    switch (c) {
+    case ' ':
+    case '\t':
+    case '\n':
+    case '\r':
+    case '\f':
+    case ';':
+    case '(':
+    case ')':
+    case '"':
+    case "'":
+    case '`':
+	return false;
+    default:
+	return true;
+    }
+};
+
+Reader.prototype = {
+    constructor: Reader,
+
+    makeList: function(list, position) {
+	list['source-position'] = position
+	return list
+    },
+
+    reset: function(input, origin) {
+	this.input  = input;
+	this.origin = origin;
+	this.offset = 0;
+	this.line   = 1;
+	this.column = 1;
+    },
+
+    loadPosition: function(position) {
+	this.offset = position.offset;
+	this.line   = position.line;
+	this.column = position.column;
+	this.origin = position.origin;		
+    },
+
+    getPosition: function() {
+	return new Position(
+	    this.offset,
+	    this.line,
+	    this.column,
+	    this.origin
+	);
+    },
+
+    isEmpty: function() {
+	this.readWhitespace();
+	return this.offset >= this.input.length;
+    },
+
+    peek: function() {
+	return this.input[this.offset];
+    },
+
+    pop: function() {
+	var c = this.peek();
+	this.offset++;
+	return c;
+    },
+
+    popWhile: function(pred) {
+	var s = [];
+	for(;;) {
+	    var c = this.peek();
+	    if (c == null || !pred(c)) { break; }
+	    s.push(this.pop());
+	}
+	return s.join("");
+    },
+
+    readWhitespace: function() {
+	var inComment = false;
+	loop:for(;;) {
+	    var c = this.peek();
+	    if (c == null) { return; }
+
+	    switch(c) {
+	    case ';' : 
+		inComment = true; 
+		this.pop(); 
+		continue loop;
+
+	    case '\n': 
+	    case '\r':
+	    case '\f': 
+		inComment = false;
+
+	    case ' ' :
+	    case '\t':
+		this.pop();
+		continue loop;
+
+	    default:
+		if (inComment) { 
+		    this.pop(); 
+		} else {
+		    return;
+		}
+		
+	    }
+	}
+    },
+
+    readSexp: function() {
+	this.readWhitespace();
+	var nextChar = this.peek();
+
+	switch (nextChar) {
+	case ')': this.syntaxError('unmatched closing paren');
+	case '(': return this.readList();
+	case '"': return this.readString();
+	case "'": return this.readQuote();
+	case ',': return this.readUnquote();
+	case '`': return this.readQuasiquote();
+	default:  return this.readAtom();
+	}
+    },
+
+    readQuote: function() {
+	var position = this.getPosition();
+	this.pop();
+	return this.makeList(
+	    [Symbol.coreSymbol('quote', position),
+	     this.readSexp()], 
+	    position);
+    },
+
+    readQuasiquote: function() {
+	var position = this.getPosition();
+	this.pop();
+	return this.makeList(
+	    [Symbol.coreSymbol('quasiquote'),
+	     this.readSexp()],
+	    position);		
+    },
+
+    readUnquote: function() {
+	var position = this.getPosition();
+	var name     = 'unquote';
+	this.pop();
+
+	if (this.peek() == '@') {
+	    this.pop();
+	    name = 'unquote-splicing';
+	}				
+
+	return this.makeList(
+	    [Symbol.coreSymbol(name), this.readSexp()]
+	)
+
+    },
+
+    readList: function() {
+	var position = this.getPosition();		
+	var list     = [];
+	this.pop();
+
+	loop:for(;;) {			
+	    this.readWhitespace();
+	    var c = this.peek();
+	    switch(c) {
+	    case null : this.error('unclosed list', position);
+	    case ')'  : this.pop(); return this.makeList(list, position);
+	    default   : list.push(this.readSexp()); continue loop;
+	    }
+	}
+    },
+
+    readString: function() {
+	var position = this.getPosition();
+	var string   = [];
+	this.pop();
+	loop:for(;;) {
+	    var c = this.pop();
+	    switch(c) {
+	    case null: this.error('unclosed string literal', position);
+	    case '"' : return string.join("");
+	    case '\\':
+		var position2 = this.getPosition();
+		var cc = this.escapeMap[this.pop()];
+		if (!cc) { this.error('invalid escape character', position2); }
+		this.string.push(cc);
+		continue;
+	    default:
+		string.push(c);
+		continue;
+	    }
+	}
+    },
+
+    parseNumber: function(string, position) {
+	var sign = 1;
+	if (string[0] == '-') {
+	    sign   = -1;
+	    string = string.substring(1);
+	}
+
+	switch (true) {
+	case Reader.floatRegex.test(string)  : return sign * parseFloat(string);
+	case Reader.hexRegex.test(string)    : return sign * parseInt(string, 16);
+	case Reader.octRegex.test(string)    : return sign * parseInt(string, 8);
+	case Reader.binaryRegex.test(string) : return sign * parseInt(string, 2);
+	case Reader.intRegex.test(string)    : return sign * parseInt(string, 10);
+	default:
+	    throw Error('invalid number literal at ' + position);
+	}
+    },
+
+    parseSymbol: function(string, position) {
+	if (string[0] == ":") {
+	    return Keyword(string.substring(1))
+	}
+
+	else {
+	    return new Symbol(null, string)
+	}
+	
+    },
+
+    readAtom: function() {
+	var position = this.getPosition();
+	var string   = this.popWhile(Reader.notTerminal);
+
+	switch (string) {
+	case '#t'    : return true;
+	case '#f'    : return false;
+	case '#nil'  : return null;
+	case '#void' : return undefined;
+	}
+
+	if (/\d|(-\d)/.test(string[0])) {
+	    return this.parseNumber(string, position);
+	} else {
+	    return this.parseSymbol(string, position);
+	}
+
+    }    
+
+};
+
+
+// END vegas.reader.js
+
+// BEGIN vegas.main.js
+
+console.log(Env.registry)
+
+var out = process.stdout
+
+function represent(obj, port, escape) {
+    if (obj == null) { port.write("#nil") }
+    else if (obj.represent) { obj.represent(port, escape) }
+}
+
+function representObjects(objs, port, escape, sep) {
+    sep = sep || " "
+    var flag = false
+    for (var i=0; i<objs.length; i++) {
+	if (flag) { port.write(sep) } else { flag=true }
+	represent(objs[i], port, escape)
     }
 }
 
-console.log(Expander.prototype)
-console.log(Symbol.coreSymbol('js*'))
+Boolean.prototype.represent = function(port, _) {
+    port.write(this.valueOf() ? "#t" : "#f")
+}
 
-// END vegas.expander.js
+Number.prototype.represent = function(port, _) {
+    port.write(this.toString())
+}
+
+String.prototype.represent = function(port, escape) {
+    port.write(escape ? JSON.stringify(this.valueOf()) : this.valueOf())
+}
+
+Symbol.prototype.represent = function(port, _) {
+    if (this.namespace) {
+	port.write(this.namespace + "::" + this.name)
+    } else {
+	port.write(this.name)
+    }
+}
+
+Keyword.prototype.represent = function(port, _) {
+    port.write(":" + this.name)
+}
+
+Array.prototype.represent = function(port, escape) {
+    port.write("(")
+    representObjects(this, port, escape)
+    port.write(")")
+}
+
+function prn() {
+    representObjects(arguments, out, true)
+    out.write("\n")
+}
+
+function println() {
+    representObjects(arguments, out, false)
+    out.write("\n")
+}
+
+function read(string) {
+    var rdr = Reader.create(string, 'test')
+    return rdr.readSexp()
+}
+
+[
+    ['foo',   Symbol],
+    [':bar',  Keyword],
+    ['#t',    Boolean],    
+    ['42',    Number],
+    ['"foo"', String],
+    ['()',    Array]
+].forEach(function(pair) {
+    var string = pair[0]
+    var obj    = read(string)
+    var type   = pair[1]
+    console.log(string, "=>", typeof obj, obj)
+});
+
+
+var expander = new Expander(
+    'test',
+    Env.create('test'), 
+    Env.createEmpty()
+)
+
+function expand(src) {
+
+    var sexp = read(src)    
+    prn(sexp)
+
+    var result = expander.expandSexp(sexp)
+    prn(result)
+    return result
+
+}
+
+expand('(require vegas)')
+expand('(+ 1 1)')
+expand('(block :the-block 42)')
+expand('(block :the-block (return-from :the-block 42)))')
+expand('(if #t (if #f 2 3) 2)')
+expand('(throw shit-at-the-wall)')
+expand('(fun (x) (* x x))')
+
+// END vegas.main.js

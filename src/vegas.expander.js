@@ -11,10 +11,32 @@ function Expander(namespace, symbols, labels) {
     this.labels    = labels;
 } 
 
+Expander.prototype.extendSymbols = function() {
+    return new Expander(this.namespace, this.symbols.extend(), this.labels)
+}
+
+Expander.prototype.extendLabels = function() {
+    return new Expander(this.namespace, this.symbols, this.labels.extend())
+}
+
 Expander.prototype.maybeResolveToMacro = function(sexp) {
+    if (sexp instanceof Array && sexp[0] instanceof Symbol) {
+	var denotation = this.symbols.get(sexp[0])	
+	if (typeof denotation == 'function') {
+	    return denotation
+	} 	    	
+    }
+    return null
 }
 
 Expander.prototype.maybeResolveToSpecialForm = function(sexp) {
+    if (sexp instanceof Array && sexp[0] instanceof Symbol) {
+	var denotation = this.symbols.get(sexp[0])	
+	if (typeof denotation == 'string') {
+	    return denotation
+	} 	    	
+    }
+    return null
 }
 
 Expander.prototype.maybeResolveToDo = function(sexp) {
@@ -30,16 +52,13 @@ Expander.prototype.maybeResolveToDefineMacro = function(sexp) {
 }
 
 Expander.prototype.macroexpand1 = function(sexp) {
-    if (sexp instanceof Array) {
-	var macro = this.maybeResolveToMacro(sexp[0])
-	if (macro) { return macro(sexp, this) }
-    }   
-    return sexp
+    var macro = this.maybeResolveToMacro(sexp)
+    return macro ? macro(sexp, this) : sexp
 }
 
 Expander.prototype.macroexpand = function(sexp) {
     var _sexp = this.macroexpand1(sexp)
-    return sexp == _sexp ? _sexp : this.macroexpand(_sexp)
+    return sexp === _sexp ? _sexp : this.macroexpand(_sexp)
 }
 
 Expander.prototype.expandSexps = function(sexps) {
@@ -91,25 +110,28 @@ Expander.prototype.bindGlobal = function(symbol) {
     var symbols         = Env.find(namespace)
     var reifiedSymbol   = symbol.reify()
     var qualifiedSymbol = new Symbol(namespace, reifiedSymbol.name)
+
     symbols.put(symbol, qualifiedSymbol)
+    symbols.put(reifiedSymbol, qualifiedSymbol)
+    Env.addExport(namespace, reifiedSymbol)
     return qualifiedSymbol
 }
 
 Expander.prototype.bindLocal = function(symbol) {
     var reifiedSymbol = symbol.reify()
-    symbols.put(symbol, reifiedSymbol)
+    this.symbols.put(symbol, reifiedSymbol)
     return reifiedSymbol
 }
 
 Expander.prototype.expandArray = function(sexp) {
-    var sf = this.maybeResolveToSpecialForm(sexp[0])
-    return sf ? this.expandSpecialForm(sf, sexp) : this.expandCall(sexp)
+    var sf = this.maybeResolveToSpecialForm(sexp)
+    return sf ? 
+	this.expandSpecialForm(sf, sexp) : 
+	this.expandCall(sexp[0], sexp.slice(1))
 }
 
 Expander.prototype.expandCall = function(callee, args) {
-    return [Symbol.coreSymbol('call'), 
-	    this.expandSexp(callee), 
-	    this.expandSexps(args)]
+    return [this.expandSexp(callee)].concat(this.expandSexps(args))
 }
 
 Expander.prototype.expandBody = function(body) {
@@ -117,8 +139,8 @@ Expander.prototype.expandBody = function(body) {
     var output = []
 
     while (input.length > 0) {
-	var sexp = input.unshift()
-	if (this.maybeResolveToBegin(sexp)) {
+	var sexp = input.shift()
+	if (this.maybeResolveToDo(sexp)) {
 	    input = sexp.slice(1).concat(input)
 	} else {
 	    output.push(this.expandSexp(sexp))
@@ -133,16 +155,6 @@ Expander.prototype.expandBody = function(body) {
 
 }
 
-Expander.prototype.expandCond = function(clauses) {
-    var _clauses = []
-    for (var i=0; i<clauses.length; i++) {
-	var test       = this.expandSexp(clauses[i][0])
-	var consequent = this.expandSexp(clauses[i][1])
-	_clauses.push([test, consequent])
-    }
-    return [Symbol.coreSymbol('cond')].concat(_clauses)
-}
-
 Expander.prototype.expandFn = function(args, body) {
     var exp   = this.extendSymbols()
     var _args = []
@@ -150,7 +162,7 @@ Expander.prototype.expandFn = function(args, body) {
 	_args[i] = exp.bindLocal(args[i])
     }
     var _body = exp.expandBody(body)
-    return [Symbol.coreSymbol('fn*'), 
+    return [Symbol.coreSymbol('fun'), 
 	    _args, 
 	    _body]
 }
@@ -195,6 +207,14 @@ Expander.prototype.expandLetrec = function(bindings, body) {
 
 }
 
+Expander.prototype.expandLabel = function(label) {
+    if (this.labels.get(label)) {
+	return label
+    } else {
+	throw Error('label: ' + label + ' is not in scope')
+   }
+}
+
 Expander.prototype.expandUnwindProtect = function(clauses) {
     // FIXME
 }
@@ -202,14 +222,17 @@ Expander.prototype.expandUnwindProtect = function(clauses) {
 Expander.prototype.expandSpecialForm = function(name, sexp) {
     switch(name) {
 
-    case 'fn*':         
+    case 'fun':         
 	return this.expandFn(sexp[1], sexp.slice(2))
 
     case 'do':
 	return this.expandBody(sexp.slice(1))
 
-    case 'cond':
-	return this.expandCond(sexp.slice(1))
+    case 'if':
+	return [Symbol.coreSymbol('if'),
+		this.expandSexp(sexp[1]),
+		this.expandSexp(sexp[2]),
+		this.expandSexp(sexp[3])]
 
     case 'let':        	
 	return this.expandLet(sexp[1], sexp.slice(2))
@@ -220,9 +243,6 @@ Expander.prototype.expandSpecialForm = function(name, sexp) {
     case 'unwind-protect':
 	return this.expandUnwindProtect(sexp.slice(1))
 
-    case 'call':
-	return this.expandCall(sexp[1], sexp.slice(2))
-
     case 'set':        
 	return [Symbol.coreSymbol('set'), 
 		this.expandSexp(sexp[1]),
@@ -232,16 +252,16 @@ Expander.prototype.expandSpecialForm = function(name, sexp) {
 	var exp   = this.extendLabels()
 	var label = exp.bindLabel(sexp[1])
 	var body  = exp.expandBody(sexp.slice(2))
-	return [exp.coreSymbol('block'), label, body]
+	return [Symbol.coreSymbol('block'), label, body]
 	
     case 'loop':
 	var exp = this.extendLabels()
 	exp.bindLabel(null)
-	return [exp.coreSymbol('loop'), 
+	return [Symbol.coreSymbol('loop'), 
 	        exp.expandBody(sexp.slice(1))]
 
     case 'return-from':
-	return [Symbol.coreSymbol('return-from'),
+	return [Symbol.coreSymbol('return-from'),		
 		this.expandLabel(sexp[1]),
 		this.expandSexp(sexp[2])]
 
@@ -252,8 +272,52 @@ Expander.prototype.expandSpecialForm = function(name, sexp) {
     case 'js*': 
 	return [Symbol.coreSymbol('js*'), sexp[1]]
 
+    case 'require':
+	var options   = {}
+	var namespace = '' + sexp[1]
+
+	for (var i=2; i<sexp.length; i+=2) {
+	    options[sexp[i]] = sexp[i+1]
+	}
+
+	options.prefix  = options.prefix || ""
+
+	if (options.only) {
+	    var names = {}
+	    options.only.forEach(function(x) {names[x] = true })
+	    var accept = function(sym) {
+		return !!names[sym]
+	    }
+	}
+
+	else if (options.exclude) {	    
+	    var names = {}
+	    options.except.forEach(function(x) {name[x] = true})
+	    var accept = function(sym) {
+		return !names[sym]
+	    }
+	}
+
+	else {
+	    var accept = function(x) { return true }
+	}
+
+	var env     = Env.find(namespace)
+	var exports = Env.getExports(namespace)
+
+	for (var i=0; i<exports.length; i++) {	    
+	    var symbol = exports[i]
+	    if (accept(symbol)) {
+		var denotation = env.get(symbol)
+		var alias      = new Symbol(null, options.prefix + symbol)
+		this.symbols.put(alias, denotation)
+	    }	    
+	}
+
+	return namespace + " required"
+
     }
+
 }
 
-console.log(Expander.prototype)
-console.log(Symbol.coreSymbol('js*'))
+
