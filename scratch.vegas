@@ -1,0 +1,7 @@
+(require vegas)
+(+ 1 1)
+(let ((x 1)) x)
+(block :block (return-from :block 42))
+(block :block 
+  (let ((exit (fun (value) (return-from :block value))))
+    (exit 42)))

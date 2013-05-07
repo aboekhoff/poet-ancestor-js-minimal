@@ -1,4 +1,4 @@
-console.log(Env.registry)
+// adhoc stuff to be removed
 
 var out = process.stdout
 
@@ -83,16 +83,75 @@ var expander = new Expander(
 )
 
 function expand(src) {
+    console.log()
 
     var sexp = read(src)    
     prn(sexp)
 
     var result = expander.expandSexp(sexp)
     prn(result)
-    return result
+
+    var norm = normalize(result)
+    prn(norm)
+
+    var cmp = Context.compile(norm, true)
+
+    
+    return txt
 
 }
 
+var inspect = require('util').inspect
+function show(x) {
+    process.stdout.write(inspect(x, false, null))
+    process.stdout.write("\n")
+}
+
+exports.load = function(file) {
+    var fs  = require('fs')
+    var txt = fs.readFileSync(file, 'utf8')
+
+    var rdr = Reader.create(txt, file)
+    
+    while (!rdr.isEmpty()) {
+	var sexp   = rdr.readSexp(); prn(sexp)
+	var exp    = expander.expandSexp(sexp); prn(exp)
+	var norm   = normalize(exp); show(norm)
+	var cmp    = Context.compile(norm, true); show(cmp)
+	var src    = Emitter.emitProgram(cmp); console.log(src)	
+	var res    = exec(src); prn(res)
+	console.log()
+    }
+}
+
+function exec(src) {
+    return Function('RT', src)(RT)
+}
+
+// FINAL INITIALIZATION 
+var base = Env.create('vegas', true)
+
+var specialFormNames = [
+    'define', 'define-macro',
+    'fun', 'do', 'if', 'let', 'letrec', 'unwind-protect',
+    'set', 'block', 'loop', 'return-from', 'throw', 'js*'
+].forEach(function(name) {
+    var symbol = new Symbol(null, name)
+    base.put(symbol, name)    
+    Env.addExport('vegas', symbol)
+})
+
+// make sure to add any builtins defined in RT
+
+for (var v in RT) {    
+    var name = v.replace('vegas::', '')
+    var sym  = new Symbol(null, name)
+    var qsym = new Symbol('vegas', name)
+    base.put(sym, qsym)
+    Env.addExport('vegas', sym)
+}
+
+/*
 expand('(require vegas)')
 expand('(+ 1 1)')
 expand('(block :the-block 42)')
@@ -100,3 +159,5 @@ expand('(block :the-block (return-from :the-block 42)))')
 expand('(if #t (if #f 2 3) 2)')
 expand('(throw shit-at-the-wall)')
 expand('(fun (x) (* x x))')
+expand('(block :the-block ())')
+*/

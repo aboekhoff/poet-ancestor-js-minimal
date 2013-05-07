@@ -7,6 +7,9 @@ TARGETS    = [
     'vegas.core.js', 
     'vegas.expander.js', 
     'vegas.reader.js',
+    'vegas.compiler.js',
+    'vegas.emitter.js',
+    'vegas.runtime.js',
     'vegas.main.js'
 ]
 

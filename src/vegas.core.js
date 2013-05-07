@@ -237,16 +237,3 @@ Env.prototype.put = function(obj, val) {
     return this._put(Env.toKey(obj), val)
 }
 
-// initialize built-in namespaces
-
-var base = Env.create('vegas', true)
-
-var specialFormNames = [
-    'define', 'define-macro',
-    'fun', 'do', 'if', 'let', 'letrec', 'unwind-protect',
-    'set', 'block', 'loop', 'return-from', 'throw', 'js*'
-].forEach(function(name) {
-    var symbol = new Symbol(null, name)
-    base.put(symbol, name)    
-    Env.addExport('vegas', symbol)
-})

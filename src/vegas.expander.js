@@ -175,7 +175,7 @@ Expander.prototype.expandLet = function(bindings, body) {
 	var exp   = exp.extendSymbols()
 	var expr  = exp.expandSexp(bindings[i][1])
 	var local = exp.bindLocal(bindings[i][0])
-	_bindings.push([expr, local])
+	_bindings.push([local, expr])
     }
 
     var _body = exp.expandBody(body)

@@ -1,2 +1,2 @@
 require('./build.js')
-require('./vegas.js')
+require('./vegas.js').load('scratch.vegas')

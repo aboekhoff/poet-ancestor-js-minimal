@@ -239,19 +239,6 @@ Env.prototype.put = function(obj, val) {
     return this._put(Env.toKey(obj), val)
 }
 
-// initialize built-in namespaces
-
-var base = Env.create('vegas', true)
-
-var specialFormNames = [
-    'define', 'define-macro',
-    'fun', 'do', 'if', 'let', 'letrec', 'unwind-protect',
-    'set', 'block', 'loop', 'return-from', 'throw', 'js*'
-].forEach(function(name) {
-    var symbol = new Symbol(null, name)
-    base.put(symbol, name)    
-    Env.addExport('vegas', symbol)
-})
 
 // END vegas.core.js
 
@@ -434,7 +421,7 @@ Expander.prototype.expandLet = function(bindings, body) {
 	var exp   = exp.extendSymbols()
 	var expr  = exp.expandSexp(bindings[i][1])
 	var local = exp.bindLocal(bindings[i][0])
-	_bindings.push([expr, local])
+	_bindings.push([local, expr])
     }
 
     var _body = exp.expandBody(body)
@@ -880,9 +867,741 @@ Reader.prototype = {
 
 // END vegas.reader.js
 
+// BEGIN vegas.compiler.js
+
+// first pass normalizes the tree to make further processing more convenient
+
+function normalizeBindings(bindings) {
+    return bindings.map(normalizeArray)
+}
+
+function normalizeArray(array) {
+    return array.map(normalize)
+}
+
+function normalizeLabel(obj) {
+    return ['LABEL', Env.toKey(obj)]
+}
+
+var NULL_LABEL = normalizeLabel(null)
+
+function normalize(sexp) {
+    if (sexp instanceof Symbol) {
+	return sexp.namespace ? 
+	    ['GLOBAL', sexp.namespace, sexp.name] :
+	    ['LOCAL', sexp.name]
+    } 
+
+    if (!(sexp instanceof Array)) {
+	return ['CONST', sexp]
+    }
+
+    if (sexp[0] instanceof Symbol &&
+        sexp[0].namespace == 'vegas') {
+	switch(sexp[0].name) {
+	case 'fun': 
+	    return ['FUN', normalizeArray(sexp[1]), normalize(sexp[2])]
+
+	case 'do' : 
+	    return ['DO', normalizeArray(sexp[1])]
+
+	case 'if' : 
+	    return ['IF', 
+		    normalize(sexp[1]), 
+		    normalize(sexp[2]),
+		    normalize(sexp[3])]
+
+	case 'let' :
+	    return ['LET',
+		    normalizeBindings(sexp[1]),
+		    normalize(sexp[2])]
+
+	case 'letrec' :
+	    return ['LETREC',
+		    normalizeBindings(sexp[1]),
+		    normalize(sexp[2])]
+
+	case 'unwind-protect' :
+	    return normalizeUnwindProtect(sexp)
+	
+	case 'set' :
+	    return ['SET', normalize(sexp[1]), normalize(sexp[2])]
+
+	case 'loop' : 
+	    return ['LOOP', normalize(sexp[1])]
+
+	case 'block' : 
+	    return ['BLOCK', 
+		    normalizeLabel(sexp[1]), 
+		    normalize(sexp[2])]
+	    
+	case 'return-from':
+	    return ['RETURN_FROM', 
+		    normalizeLabel(sexp[1]), 
+		    normalize(sexp[2])]
+
+	case 'throw':
+	    return ['THROW', normalize(sexp[1])]
+
+	case 'js*':
+	    return ['RAW', sexp[1]]
+
+	}   
+    }
+
+    return ['CALL', normalize(sexp[0]), normalizeArray(sexp.slice(1))]
+
+}
+
+//
+
+function tracerFor(node) {    
+    function tracer(val) {
+	tracer.traced = true
+	return ['SET', node, val]
+    }
+    tracer.traced = false
+    return tracer
+}
+
+function Scope(level, locals, labels) {
+    this.level  = level
+    this.locals = locals
+    this.labels = labels
+}
+
+Scope.create = function() {
+    return new Scope(0, 0, 0) 
+}
+
+Scope.prototype = {
+    extend: function() {
+	return new Scope(this.level+1, 0, 0)
+    },
+
+    makeLocal: function() {
+	return ['LOCAL', this.level, this.locals++]
+    },
+
+    makeLabel: function(tracer) {
+	return ['LABEL', this.level, this.labels++, false, tracer]
+    }
+
+}
+
+function Context(block, env, scope) {
+    this.block = block
+    this.env   = env
+    this.scope = scope
+}
+
+Context.create = function() {
+    return new Context([], Dict.create(), Scope.create())
+}
+
+Context.compile = function(prog, wantRtn) {
+    var ctx = Context.create()
+
+    if (wantRtn) {
+	var rtn = ctx.scope.makeLocal()
+	ctx.compile(prog, tracerFor(rtn))
+	ctx.declareLocals()
+	ctx.push(['RETURN', rtn])
+    } 
+
+    else {
+	ctx.compile(prog, null)
+	ctx.declareLocals()
+    }
+
+    return ctx.block
+
+}
+
+Context.prototype = {
+
+    extendEnv: function() {
+	return new Context(
+	    this.block, 
+	    this.env.extend(), 
+	    this.scope
+	)
+    },
+
+    extendScope: function() {
+	return new Context(
+	    [],
+	    this.env.extend(),
+	    this.scope.extend()
+	)
+    },
+
+    declareLocals: function() {
+	this.block.unshift(['DECLARE', this.scope.level, this.scope.locals])
+    },
+
+    withBlock: function() {
+	return new Context([], this.env, this.scope)
+    },
+
+    bindLabel: function(node, tracer) {
+	var label = this.scope.makeLabel(tracer)
+	this.env.put(node, label)
+	return label
+    },
+
+    bindLocal: function(node) {
+	var local = this.scope.makeLocal()
+	this.env.put(node, local)
+	return local
+    },
+
+    bindArgs: function(nodes) {
+	var args = []
+	for (var i=0; i<nodes.length; i++) {
+	    var arg = ['ARG', this.scope.level, i]
+	    this.env.put(nodes[i], arg)
+	    args.push(arg)
+	}
+	return args
+    },
+
+    getLocal: function(node) {
+	return this.env.get(node)
+    },
+
+    getLabel: function(node) {
+	return this.env.get(node)
+    },
+
+    push: function(x) {
+	this.block.push(x)
+    },
+
+    pushExpr: function(x, t) {
+	this.block.push(t ? t(x) : x)
+    },
+
+    pushPure: function(x, t) {
+	if (t) { this.block.push(t(x)) }
+    },
+
+    toAtom: function(node) {	
+	var tag = node[0]
+	switch(tag) {
+
+	case 'CONST':
+	    return node
+
+	case 'VAR':
+	    return this.getVar(node)
+
+	default:
+	    var atom = this.makeLocal()
+	    this.compile(node, tracerFor(atom))
+	    return atom
+	}
+    },
+
+    toExprs: function(nodes) {
+	var exprs = []
+	for (var i=0; i<nodes.length; i++) {
+	    exprs[i] = this.toExpr(nodes[i])
+	}
+	return exprs
+    },
+
+    toExpr: function(node) {
+	var tag = node[0]
+	switch(tag) {
+
+	case 'RAW':
+	case 'CONST':
+	case 'GLOBAL':	    
+	    return node
+
+	case 'LOCAL':
+	    return this.getLocal(node)
+
+	case 'SET':
+	    var loc = this.toExpr(node[1])
+	    this.compile(node[2], tracerFor(loc))
+
+	case 'FUN':
+	    var cmp    = this.extendScope()
+	    var ret    = cmp.scope.makeLocal()
+	    var args   = cmp.bindArgs(node[1])
+	    cmp.compile(node[2], tracerFor(ret))
+	    cmp.declareLocals()
+	    cmp.push(['RETURN', ret])
+	    return ['FUN', args, cmp.block]
+
+	case 'CALL':
+	    var callee = this.toExpr(node[1])
+	    var args   = this.toExprs(node[2])
+	    return ['CALL', callee, args]
+
+	case 'THROW':
+	case 'RETURN_FROM':
+	    this.compile(node, null)
+	    return ['CONST', null]
+
+	default:
+	    var local = this.scope.makeLocal()
+	    this.compile(node, tracerFor(local))
+	    return local
+	    
+	}
+    },
+
+    toBlock: function(node, tracer) {
+	var cmp = this.withBlock()
+	cmp.compile(node, tracer)
+	return cmp.block
+    },
+
+    compileBody: function(body, tracer) {	
+	for (var i=0; i<body.length; i++) {
+	    var node = body[i]
+	    // everything but last expression is for side effects
+	    // so compile side effects only
+	    if (i == body.length) {
+		this.compile(node, tracer)
+	    } else {
+		this.compile(node, null)
+	    }
+	}
+    },
+
+    compile: function(node, tracer) {
+	var tag = node[0]
+
+	switch(tag) {
+
+	case 'RAW':
+	case 'CONST':
+	case 'GLOBAL':
+	    this.pushPure(node, tracer)
+	    break
+
+	case 'LOCAL':
+	    this.pushPure(this.getLocal(node), tracer)
+	    break
+
+	case 'DO':
+	    this.compileBody(node[1], tracer)
+	    break
+
+	case 'IF':
+	    var test        = this.toAtom(node[1])
+	    var consequent  = this.toBlock(node[2], tracer)
+	    var alternative = this.toBlock(node[3], tracer)
+	    this.push(['IF', test, consequent, alternative])
+	    break
+
+	case 'LOOP':
+	    var cmp   = this.extendEnv()
+	    var label = cmp.bindLabel(NULL_LABEL, tracer)
+	    var block = cmp.toBlock(node[1], tracer)
+	    this.push(['LOOP', label, block])	   
+	    break
+
+	case 'BLOCK':
+	    var cmp   = this.extendEnv()
+	    var label = cmp.bindLabel(node[1], tracer)
+	    var block = cmp.toBlock(node[2], tracer)
+	    this.push(['BLOCK', label, block])
+	    break
+	    
+	case 'RETURN_FROM':
+	    // label structure:
+	    // [ TAG, LEVEL, ID, HAS_NON_LOCAL_EXITS?, TRACER, CONTEXT]
+	    var label  = this.getLabel(node[1])
+	    var tracer = label[4]
+	    this.compile(node[2], tracer)
+	    if (this.scope.level != label[1]) {	
+		if (!label[3]) { label[3] = true }
+		this.push(['NON_LOCAL_EXIT', label])
+	    } else {
+		this.push(['LOCAL_EXIT', label])
+	    }
+	    break
+
+	case 'LET':
+	    var ctx      = this
+	    var bindings = node[1]
+	    var body     = node[2]
+	    for (var i=0; i<bindings.length; i++) {		
+		var pair  = bindings[i]
+		var sym   = pair[0]
+		var expr  = pair[1]
+		var local = ctx.scope.makeLocal()
+		ctx.compile(expr, tracerFor(local))
+		ctx = ctx.extendEnv()
+		ctx.env.put(sym, local)
+	    }
+	    ctx.compile(body, tracer)
+	    break
+
+	case 'THROW':
+	    this.push(['THROW', this.toExpr(node[1])])
+	    break
+
+	case 'CALL':
+	case 'SET':
+	case 'FUN':
+	    this.pushPure(this.toExpr(node), tracer)
+
+	}
+    }
+
+}
+
+
+
+// END vegas.compiler.js
+
+// BEGIN vegas.emitter.js
+
+function Emitter() {
+    this.buffer    = []
+    this.indention = 0
+}
+
+Emitter.emitProgram = function(program, options) {
+    var e = new Emitter()
+    if (options) { for (var v in options) { e[v] = options[v] } }
+    e.emitStatements(program)
+    return e.buffer.join("")
+}
+
+Emitter.prototype = {
+    indentSize:   4,
+
+    globalSymbol: "RT",
+
+    namespaceSeparator: "::",
+
+    indent: function() {
+	this.indention += this.indentSize
+    },
+
+    dedent: function() {
+	this.indention -= this.indentSize
+    },
+
+    write: function(x) {
+	this.buffer.push(x)
+    },
+
+    tab: function() {
+	var i=this.indention
+	while(i--) { this.write(" ") }
+    },
+
+    // carriage return
+    cr: function() {
+	this.write("\n")
+	this.tab()
+    },
+
+    emitNodes: function(nodes, sep) {
+	var started = false
+	for (var i=0; i<nodes.length; i++) {
+	    if (started) { this.write(sep) } else { started = true }
+	    this.emit(nodes[i])
+	}
+    },
+
+    emitArray: function(nodes) {
+	this.write("[")
+	this.emitNodes(nodes, ",")
+	this.write("]")
+    },
+
+    emitList: function(nodes) {
+	this.write("(")
+	this.emitNodes(nodes, ",")
+	this.write(")")
+    },
+
+    emitStatements: function(nodes) {
+	for (var i=0; i<nodes.length; i++) {
+	    this.cr()
+	    this.emit(nodes[i]);
+	    this.write(";")
+	}
+    },
+
+    emitBlock: function(nodes) {
+	this.write("{")
+	this.indent()
+	this.emitStatements(nodes)
+	this.dedent()
+	this.cr()
+	this.write("}")
+    },
+
+    emitLabel: function(node) {
+	this.write("block_")
+	this.write(node[1])
+	this.write("_")
+	this.write(node[2])
+    },
+
+    emitFlag: function(node) {
+	this.write("flag_")
+	this.write(node[1])
+	this.write("_")
+	this.write(node[2])
+    },
+
+    emitLabeledBlock: function(prefix, label, block) {
+	var hasNonLocalExits = label[3]	
+
+	if (hasNonLocalExits) {	    
+	    this.write('var ')
+	    this.emitFlag(label)
+	    this.write(' = true;')
+	    this.cr()
+	    this.write('try {')
+	    this.indent()
+	    this.cr()
+	}
+
+	this.emitLabel(label)
+	this.write(":")
+	this.write(prefix)
+	this.write(" ")
+	this.emitBlock(block)
+	
+	if (hasNonLocalExits) {
+	    this.dedent()
+	    this.cr()
+
+	    this.write("} catch (e) {")
+	    this.indent()
+	    this.cr()
+
+	    this.write('if (')
+	    this.emitFlag(label)
+	    this.write(') {')
+	    this.indent()
+	    this.cr()
+
+	    // flag not thrown
+	    this.write('throw e;')
+	    this.dedent()
+	    this.cr()
+	    this.write('}')
+	    this.dedent()
+	    this.cr()
+	    this.write('} finally {')
+	    this.indent()
+	    this.cr()
+	    
+	    this.emitFlag(label)
+	    this.write(' = false')
+	    this.dedent()
+	    this.cr()
+	    this.write('}')	    
+	}
+
+    },
+
+    emit: function(node) {
+	var tag = node[0]
+	var a   = node[1]
+	var b   = node[2]
+	var c   = node[3]
+	
+	switch(tag) {
+
+	case 'DECLARE':
+	    this.write('var ')
+	    var flag = false
+	    for (var i=0; i<b; i++) {
+		if (flag) { this.write(', ') } else { flag = true }
+		this.write('local_' + a + '_' + i)
+	    }
+	    break
+
+	case 'PROPERTY':
+	    this.emit(a)
+	    this.write('[')
+	    this.emit(b)
+	    this.write(']')
+	    break
+
+	case 'RAW':
+	    this.write(a)
+	    break
+
+	case 'CONST':
+	    this.write(typeof a == 'string' ? JSON.stringify(a) : a)
+	    break;
+
+	case 'GLOBAL': 
+	    this.write(this.globalSymbol)
+	    this.write("[\"")
+	    this.write(a)
+	    this.write(this.namespaceSeparator)
+	    this.write(b)
+	    this.write("\"]")
+	    break
+
+	case 'ARG':
+	    this.write("arg_" + a + "_" + b)
+	    break
+
+	case 'LOCAL':
+	    this.write("local_" + a + "_" + b)
+	    break
+
+	case 'SET':
+	    this.emit(a)
+	    this.write(" = ")
+	    this.emit(b)
+	    break
+
+	case 'FUN':
+	    this.write("function")
+	    this.emitList(a)
+	    this.write(" ")
+	    this.emitBlock(b)
+	    break
+
+	case 'CALL':
+	    this.emit(a)
+	    this.emitList(b)
+	    break
+
+	case 'THROW':
+	    this.write('throw ')
+	    this.emit(a)
+	    break
+
+	case 'RETURN':
+	    this.write('return ')
+	    this.emit(a)
+	    break	    
+
+	case 'LOOP':
+	    this.emitLabeledBlock('for(;;)', a, b)
+	    break
+
+	case 'BLOCK':
+	    this.emitLabeledBlock('', a, b)
+	    break
+
+	case 'LOCAL_EXIT':
+	    this.write('break ')
+	    this.emitLabel(a)
+	    break
+
+	case 'NON_LOCAL_EXIT':
+	    this.emitFlag(a)
+	    this.write(' = false; ')
+	    this.write('throw "NON_LOCAL_EXIT"')
+	    break
+
+	    // FIXME:
+	    // fix to avoid emitting redundant boilerplate
+	case 'IF':
+	    this.write('if (')
+	    this.emit(a)
+	    this.write(') ')
+	    this.emitBlock(b)
+	    this.write(' else ')
+	    this.emitBlock(c)
+
+	default:
+	    throw Error('unhandled tag in emitter: ' + tag)
+
+	}
+
+    },
+
+}
+
+
+// END vegas.emitter.js
+
+// BEGIN vegas.runtime.js
+
+var RT = {
+
+    'vegas::Symbol'  : Symbol,
+    'vegas::Keyword' : Keyword,
+    'vegas::Tag'     : Tag,
+
+    'vegas::+' : function(x, y) {
+	switch(arguments.length) {
+	case 0: return 0
+	case 1: return x
+	case 2: return x + y
+	default:
+	    var r = x + y
+	    var i = 2;
+	    while (i<arguments.length) { r += arguments[i] }
+	    return r
+	}
+    },
+
+    'vegas::*' : function(x, y) {
+	switch(arguments.length) {
+	case 0: return 1
+	case 1: return x
+	case 2: return x * y
+	default:
+	    var r = x * y
+	    var i = 2;
+	    while (i<arguments.length) { r *= arguments[i] }
+	    return r
+	}
+    },
+
+    'vegas::-' : function(x, y) {
+	switch(arguments.length) {
+	case 0: throw Error('vegas::- requires at least one argument')
+	case 1: return -x
+	case 2: return x - y
+	default:
+	    var r = x - y
+	    var i = 2;
+	    while (i<arguments.length) { r -= arguments[i] }
+	    return r
+	}
+    },
+
+    'vegas::/' : function(x, y) {
+	switch(arguments.length) {
+	case 0: throw Error('vegas::/ requires at least one argument')
+	case 1: return 1/x
+	case 2: return x / y
+	default:
+	    var r = x/y
+	    var i = 2;
+	    while (i<arguments.length) { r /= arguments[i] }
+	    return r
+	}
+    },
+
+    'vegas::mod' : function(x, y) {
+	return x % y
+    },
+
+    'vegas::div' : function(x, y) {
+	return Math.floor(x/y)
+    }
+
+}
+
+// END vegas.runtime.js
+
 // BEGIN vegas.main.js
 
-console.log(Env.registry)
+// adhoc stuff to be removed
 
 var out = process.stdout
 
@@ -967,16 +1686,75 @@ var expander = new Expander(
 )
 
 function expand(src) {
+    console.log()
 
     var sexp = read(src)    
     prn(sexp)
 
     var result = expander.expandSexp(sexp)
     prn(result)
-    return result
+
+    var norm = normalize(result)
+    prn(norm)
+
+    var cmp = Context.compile(norm, true)
+
+    
+    return txt
 
 }
 
+var inspect = require('util').inspect
+function show(x) {
+    process.stdout.write(inspect(x, false, null))
+    process.stdout.write("\n")
+}
+
+exports.load = function(file) {
+    var fs  = require('fs')
+    var txt = fs.readFileSync(file, 'utf8')
+
+    var rdr = Reader.create(txt, file)
+    
+    while (!rdr.isEmpty()) {
+	var sexp   = rdr.readSexp(); prn(sexp)
+	var exp    = expander.expandSexp(sexp); prn(exp)
+	var norm   = normalize(exp); show(norm)
+	var cmp    = Context.compile(norm, true); show(cmp)
+	var src    = Emitter.emitProgram(cmp); console.log(src)	
+	var res    = exec(src); prn(res)
+	console.log()
+    }
+}
+
+function exec(src) {
+    return Function('RT', src)(RT)
+}
+
+// FINAL INITIALIZATION 
+var base = Env.create('vegas', true)
+
+var specialFormNames = [
+    'define', 'define-macro',
+    'fun', 'do', 'if', 'let', 'letrec', 'unwind-protect',
+    'set', 'block', 'loop', 'return-from', 'throw', 'js*'
+].forEach(function(name) {
+    var symbol = new Symbol(null, name)
+    base.put(symbol, name)    
+    Env.addExport('vegas', symbol)
+})
+
+// make sure to add any builtins defined in RT
+
+for (var v in RT) {    
+    var name = v.replace('vegas::', '')
+    var sym  = new Symbol(null, name)
+    var qsym = new Symbol('vegas', name)
+    base.put(sym, qsym)
+    Env.addExport('vegas', sym)
+}
+
+/*
 expand('(require vegas)')
 expand('(+ 1 1)')
 expand('(block :the-block 42)')
@@ -984,5 +1762,7 @@ expand('(block :the-block (return-from :the-block 42)))')
 expand('(if #t (if #f 2 3) 2)')
 expand('(throw shit-at-the-wall)')
 expand('(fun (x) (* x x))')
+expand('(block :the-block ())')
+*/
 
 // END vegas.main.js
