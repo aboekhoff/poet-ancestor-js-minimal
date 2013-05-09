@@ -12,6 +12,10 @@ function normalizeLabel(obj) {
     return ['LABEL', Env.toKey(obj)]
 }
 
+function normalizeProperty(root, fields) {
+
+}
+
 var NULL_LABEL = normalizeLabel(null)
 
 function normalize(sexp) {
@@ -28,6 +32,14 @@ function normalize(sexp) {
     if (sexp[0] instanceof Symbol &&
         sexp[0].namespace == 'vegas') {
 	switch(sexp[0].name) {
+
+	case '.':
+	    var node = normalize(sexp[1])
+	    for (var i=2; i<sexp.length; i++) {
+		node = ['PROPERTY', node, normalize(sexp[i])]
+	    }
+	    return node
+
 	case 'fun': 
 	    return ['FUN', normalizeArray(sexp[1]), normalize(sexp[2])]
 
@@ -249,12 +261,16 @@ Context.prototype = {
 	case 'GLOBAL':	    
 	    return node
 
+	case 'PROPERTY':
+	    return ['PROPERTY', this.toExpr(node[1]), this.toExpr(node[2])]
+
 	case 'LOCAL':
 	    return this.getLocal(node)
 
 	case 'SET':
 	    var loc = this.toExpr(node[1])
 	    this.compile(node[2], tracerFor(loc))
+	    return loc
 
 	case 'FUN':
 	    var cmp    = this.extendScope()
@@ -376,11 +392,18 @@ Context.prototype = {
 	    this.push(['THROW', this.toExpr(node[1])])
 	    break
 
-	case 'CALL':
+	case 'PROPERTY':
 	case 'SET':
 	case 'FUN':
 	    this.pushPure(this.toExpr(node), tracer)
+	    break
 
+	case 'CALL':
+	    this.pushExpr(this.toExpr(node), tracer)
+	    break
+
+	default:
+	    throw Error('bad tag in compile: ' + node[0])
 	}
     }
 

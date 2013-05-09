@@ -474,6 +474,11 @@ Expander.prototype.expandSpecialForm = function(name, sexp) {
     case 'do':
 	return this.expandBody(sexp.slice(1))
 
+    case '.':
+	var prefix = [Symbol.coreSymbol('.'), this.expandSexp(sexp[1])]
+	var suffix = this.expandSexps(sexp.slice(2))
+	return prefix.concat(suffix)
+
     case 'if':
 	return [Symbol.coreSymbol('if'),
 		this.expandSexp(sexp[1]),
@@ -883,6 +888,10 @@ function normalizeLabel(obj) {
     return ['LABEL', Env.toKey(obj)]
 }
 
+function normalizeProperty(root, fields) {
+
+}
+
 var NULL_LABEL = normalizeLabel(null)
 
 function normalize(sexp) {
@@ -899,6 +908,14 @@ function normalize(sexp) {
     if (sexp[0] instanceof Symbol &&
         sexp[0].namespace == 'vegas') {
 	switch(sexp[0].name) {
+
+	case '.':
+	    var node = normalize(sexp[1])
+	    for (var i=2; i<sexp.length; i++) {
+		node = ['PROPERTY', node, normalize(sexp[i])]
+	    }
+	    return node
+
 	case 'fun': 
 	    return ['FUN', normalizeArray(sexp[1]), normalize(sexp[2])]
 
@@ -1120,12 +1137,16 @@ Context.prototype = {
 	case 'GLOBAL':	    
 	    return node
 
+	case 'PROPERTY':
+	    return ['PROPERTY', this.toExpr(node[1]), this.toExpr(node[2])]
+
 	case 'LOCAL':
 	    return this.getLocal(node)
 
 	case 'SET':
 	    var loc = this.toExpr(node[1])
 	    this.compile(node[2], tracerFor(loc))
+	    return loc
 
 	case 'FUN':
 	    var cmp    = this.extendScope()
@@ -1247,11 +1268,18 @@ Context.prototype = {
 	    this.push(['THROW', this.toExpr(node[1])])
 	    break
 
-	case 'CALL':
+	case 'PROPERTY':
 	case 'SET':
 	case 'FUN':
 	    this.pushPure(this.toExpr(node), tracer)
+	    break
 
+	case 'CALL':
+	    this.pushExpr(this.toExpr(node), tracer)
+	    break
+
+	default:
+	    throw Error('bad tag in compile: ' + node[0])
 	}
     }
 
@@ -1733,26 +1761,39 @@ function exec(src) {
 
 // FINAL INITIALIZATION 
 var base = Env.create('vegas', true)
+var js   = Env.create('js', true)
 
 var specialFormNames = [
     'define', 'define-macro',
-    'fun', 'do', 'if', 'let', 'letrec', 'unwind-protect',
-    'set', 'block', 'loop', 'return-from', 'throw', 'js*'
+    'fun', 'do', 'if', 'let', 'letrec', 'unwind-protect', 
+    'set', 'block', 'loop', 'return-from', 'throw', 'js*', '.'
 ].forEach(function(name) {
     var symbol = new Symbol(null, name)
     base.put(symbol, name)    
     Env.addExport('vegas', symbol)
 })
 
-// make sure to add any builtins defined in RT
-
+// quick hack to make sure to add any builtins defined in RT
 for (var v in RT) {    
-    var name = v.replace('vegas::', '')
+    if (v.substring(0, 7) == 'vegas::') {
+	var name = v.replace('vegas::', '')
+	var sym  = new Symbol(null, name)
+	var qsym = new Symbol('vegas', name)
+	base.put(sym, qsym)
+	Env.addExport('vegas', sym) 
+    }
+}
+
+/*
+for (var v in RT) {    
+    if (v.substring(0, 4) == 'js::')
+    var name = v.replace('js::', '')
     var sym  = new Symbol(null, name)
-    var qsym = new Symbol('vegas', name)
+    var qsym = new Symbol('js', name)
     base.put(sym, qsym)
     Env.addExport('vegas', sym)
 }
+*/
 
 /*
 expand('(require vegas)')

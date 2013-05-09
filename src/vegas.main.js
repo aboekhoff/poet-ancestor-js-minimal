@@ -130,26 +130,39 @@ function exec(src) {
 
 // FINAL INITIALIZATION 
 var base = Env.create('vegas', true)
+var js   = Env.create('js', true)
 
 var specialFormNames = [
     'define', 'define-macro',
-    'fun', 'do', 'if', 'let', 'letrec', 'unwind-protect',
-    'set', 'block', 'loop', 'return-from', 'throw', 'js*'
+    'fun', 'do', 'if', 'let', 'letrec', 'unwind-protect', 
+    'set', 'block', 'loop', 'return-from', 'throw', 'js*', '.'
 ].forEach(function(name) {
     var symbol = new Symbol(null, name)
     base.put(symbol, name)    
     Env.addExport('vegas', symbol)
 })
 
-// make sure to add any builtins defined in RT
-
+// quick hack to make sure to add any builtins defined in RT
 for (var v in RT) {    
-    var name = v.replace('vegas::', '')
+    if (v.substring(0, 7) == 'vegas::') {
+	var name = v.replace('vegas::', '')
+	var sym  = new Symbol(null, name)
+	var qsym = new Symbol('vegas', name)
+	base.put(sym, qsym)
+	Env.addExport('vegas', sym) 
+    }
+}
+
+/*
+for (var v in RT) {    
+    if (v.substring(0, 4) == 'js::')
+    var name = v.replace('js::', '')
     var sym  = new Symbol(null, name)
-    var qsym = new Symbol('vegas', name)
+    var qsym = new Symbol('js', name)
     base.put(sym, qsym)
     Env.addExport('vegas', sym)
 }
+*/
 
 /*
 expand('(require vegas)')

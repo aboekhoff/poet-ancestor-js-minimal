@@ -228,6 +228,11 @@ Expander.prototype.expandSpecialForm = function(name, sexp) {
     case 'do':
 	return this.expandBody(sexp.slice(1))
 
+    case '.':
+	var prefix = [Symbol.coreSymbol('.'), this.expandSexp(sexp[1])]
+	var suffix = this.expandSexps(sexp.slice(2))
+	return prefix.concat(suffix)
+
     case 'if':
 	return [Symbol.coreSymbol('if'),
 		this.expandSexp(sexp[1]),
