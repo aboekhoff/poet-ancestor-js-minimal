@@ -7,7 +7,15 @@ Emitter.emitProgram = function(program, options) {
     var e = new Emitter()
     if (options) { for (var v in options) { e[v] = options[v] } }
     e.emitStatements(program)
-    return e.buffer.join("")
+    return e.getResult()
+}
+
+Emitter.bake = function(program, options) {
+    var e = new Emitter()
+    if (options) { for (var v in options) { e[v] = options[v] } }
+    e.emitStatements(program)
+    var warhead = Function(e.globalSymbol, e.getResult())
+    return warhead
 }
 
 Emitter.prototype = {
@@ -16,6 +24,10 @@ Emitter.prototype = {
     globalSymbol: "RT",
 
     namespaceSeparator: "::",
+
+    getResult: function() {
+	return this.buffer.join("")
+    },
 
     indent: function() {
 	this.indention += this.indentSize
@@ -50,13 +62,13 @@ Emitter.prototype = {
 
     emitArray: function(nodes) {
 	this.write("[")
-	this.emitNodes(nodes, ",")
+	this.emitNodes(nodes, ", ")
 	this.write("]")
     },
 
     emitList: function(nodes) {
 	this.write("(")
-	this.emitNodes(nodes, ",")
+	this.emitNodes(nodes, ", ")
 	this.write(")")
     },
 
@@ -152,6 +164,21 @@ Emitter.prototype = {
 	
 	switch(tag) {
 
+	case 'IF':
+	    this.write('if(')
+	    this.emit(a)
+	    this.write(') ')
+	    this.emitBlock(b)
+	    this.write(' else ')
+
+	    if (c[0][0] == 'IF') {
+		this.emit(c[0])
+	    } else {
+		this.emitBlock(c)
+	    }
+	    break
+
+
 	case 'DECLARE':
 	    this.write('var ')
 	    var flag = false
@@ -240,15 +267,29 @@ Emitter.prototype = {
 	    this.write('throw "NON_LOCAL_EXIT"')
 	    break
 
-	    // FIXME:
-	    // fix to avoid emitting redundant boilerplate
-	case 'IF':
-	    this.write('if (')
+	case 'RESTARGS':
+	    this.emit(a);
+	    this.write(' = [];')	    
+	    this.cr()
+
+	    this.write('for(var i='+b+', ii=arguments.length; i<ii; i++) {')
+
+	    this.indent()
+	    this.cr()
+
 	    this.emit(a)
-	    this.write(') ')
-	    this.emitBlock(b)
-	    this.write(' else ')
-	    this.emitBlock(c)
+	    this.write('.push(arguments[i]);')
+	    
+	    this.dedent()
+	    this.cr()
+
+	    this.write("}")
+	    break
+
+	case 'THIS':
+	    this.emit(a)
+	    this.write(' = this;')
+	    break
 
 	default:
 	    throw Error('unhandled tag in emitter: ' + tag)

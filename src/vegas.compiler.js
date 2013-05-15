@@ -12,7 +12,46 @@ function normalizeLabel(obj) {
     return ['LABEL', Env.toKey(obj)]
 }
 
-function normalizeProperty(root, fields) {
+function normalizeFn(args, body) {
+    body = normalize(body)
+
+    var pargs = []
+    var rest  = null
+    var self  = null
+
+    var i=0;
+    while(i<args.length) {
+	var arg = args[i++]
+
+	if (arg instanceof Symbol) {
+	    pargs.push(normalize(arg))
+	} 
+
+	if (arg instanceof Keyword) {
+	    var key = arg
+	    var arg = normalize(args[i++])
+	    switch (key.name) {
+	    case 'rest':
+		rest = arg
+		break
+	    case 'this':
+		self = arg
+		break
+	    }
+	}
+    }        
+
+    if (rest || self) {
+	body = [body]
+	if (rest) { body.unshift(['RESTARGS', rest, pargs.length]) }
+	if (self) { body.unshift(['THIS', self]) }
+	body = ['DO', body]
+    }
+
+    console.log(pargs)
+    console.log(body)
+
+    return ['FUN', pargs, body]
 
 }
 
@@ -40,8 +79,9 @@ function normalize(sexp) {
 	    }
 	    return node
 
-	case 'fun': 
-	    return ['FUN', normalizeArray(sexp[1]), normalize(sexp[2])]
+	case 'fn*': 
+	    console.log(sexp)
+	    return normalizeFn(sexp[1], sexp[2])
 
 	case 'do' : 
 	    return ['DO', normalizeArray(sexp[1])]
@@ -178,7 +218,9 @@ Context.prototype = {
     },
 
     declareLocals: function() {
-	this.block.unshift(['DECLARE', this.scope.level, this.scope.locals])
+	if (this.scope.locals > 0) {
+	    this.block.unshift(['DECLARE', this.scope.level, this.scope.locals]) 
+	}
     },
 
     withBlock: function() {
@@ -238,7 +280,7 @@ Context.prototype = {
 	    return this.getVar(node)
 
 	default:
-	    var atom = this.makeLocal()
+	    var atom = this.scope.makeLocal()
 	    this.compile(node, tracerFor(atom))
 	    return atom
 	}
@@ -256,6 +298,7 @@ Context.prototype = {
 	var tag = node[0]
 	switch(tag) {
 
+	case 'RESTARGS':
 	case 'RAW':
 	case 'CONST':
 	case 'GLOBAL':	    
@@ -286,10 +329,23 @@ Context.prototype = {
 	    var args   = this.toExprs(node[2])
 	    return ['CALL', callee, args]
 
+	case 'THIS':
+	case 'RESTARGS':
 	case 'THROW':
 	case 'RETURN_FROM':
 	    this.compile(node, null)
 	    return ['CONST', null]
+
+	case 'DO':
+	    var body = node[1]
+	    var len  = body.length
+	    for (var i=0; i<len; i++) {
+		if (i < len-1) {
+		    this.compile(body[i], null)
+		} else {
+		    return this.toExpr(body[i])
+		}
+	    }
 
 	default:
 	    var local = this.scope.makeLocal()
@@ -306,14 +362,12 @@ Context.prototype = {
     },
 
     compileBody: function(body, tracer) {	
-	for (var i=0; i<body.length; i++) {
-	    var node = body[i]
-	    // everything but last expression is for side effects
-	    // so compile side effects only
-	    if (i == body.length) {
-		this.compile(node, tracer)
+	var len = body.length
+	for (var i=0; i<len; i++) {
+	    if (i < len-1) {
+		this.compile(body[i], null)
 	    } else {
-		this.compile(node, null)
+		this.compile(body[i], tracer)
 	    }
 	}
     },
@@ -402,9 +456,33 @@ Context.prototype = {
 	    this.pushExpr(this.toExpr(node), tracer)
 	    break
 
+	case 'RESTARGS':
+	    var local = this.bindLocal(node[1])
+	    this.push(['RESTARGS', local, node[2]])
+	    break
+
+	case 'THIS':
+	    var local = this.bindLocal(node[1])
+	    this.push(['THIS', local])
+	    break	    
+
 	default:
 	    throw Error('bad tag in compile: ' + node[0])
 	}
+    },
+
+    compileTopLevelFragment: function(normalizedSexp) {
+	this.compile(normalizedSexp)
+	this.declareLocals()
+	return this.block
+    },
+
+    compileExpression: function(normalizedSexp) {
+	var ret = this.scope.makeLocal()
+	this.compile(normalizedSexp, tracerFor(ret))
+	this.declareLocals()
+	this.push(['RETURN', ret])	
+	return this.block
     }
 
 }

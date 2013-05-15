@@ -1,3 +1,11 @@
+// may remove log at a later date
+
+function log(string) {
+}
+
+// for now it's invaluable while ironing bugs
+// out of the compiler
+
 var Runtime = {}
 
 function Keyword(name) {
@@ -18,6 +26,9 @@ Keyword.prototype.toString = function() {
 }
 
 function Symbol(namespace, name) {
+    if (!(this instanceof Symbol)) {
+	return new Symbol(namespace, name)
+    }
     this.namespace = namespace;
     this.name      = name;
     this.key       = "#" + name;
@@ -64,6 +75,9 @@ TaggedSymbol.prototype.reify = function() {
 */
 
 function Tag(env) {
+    if (!(this instanceof Tag)) {
+	return new Tag(env)
+    }
     this.id  = ++Tag.nextID
     this.env = env
 }

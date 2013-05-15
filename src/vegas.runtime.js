@@ -12,7 +12,7 @@ var RT = {
 	default:
 	    var r = x + y
 	    var i = 2;
-	    while (i<arguments.length) { r += arguments[i] }
+	    while (i<arguments.length) { r += arguments[i++] }
 	    return r
 	}
     },
@@ -25,7 +25,7 @@ var RT = {
 	default:
 	    var r = x * y
 	    var i = 2;
-	    while (i<arguments.length) { r *= arguments[i] }
+	    while (i<arguments.length) { r *= arguments[i++] }
 	    return r
 	}
     },
@@ -38,7 +38,7 @@ var RT = {
 	default:
 	    var r = x - y
 	    var i = 2;
-	    while (i<arguments.length) { r -= arguments[i] }
+	    while (i<arguments.length) { r -= arguments[i++] }
 	    return r
 	}
     },
@@ -51,7 +51,7 @@ var RT = {
 	default:
 	    var r = x/y
 	    var i = 2;
-	    while (i<arguments.length) { r /= arguments[i] }
+	    while (i<arguments.length) { r /= arguments[i++] }
 	    return r
 	}
     },
@@ -62,6 +62,38 @@ var RT = {
 
     'vegas::div' : function(x, y) {
 	return Math.floor(x/y)
+    },
+
+    'vegas::array?' : Array.isArray,
+
+    'vegas::boolean?' : function(x) {
+	return typeof x == 'boolean'
+    },
+
+    'vegas::number?' : function(x) {
+	return typeof x == 'number'
+    },
+
+    'vegas::string?' : function(x) {
+	return typeof x == 'string'
+    },
+
+    'vegas::array' : function() {
+	var len = arguments.length
+	var arr = new Array(len)
+	for (var i=0; i<len; i++) { arr[i] = arguments[i] }
+	return arr
+    },
+
+    'vegas::array*' : function() {
+	var alen = arguments.length
+	var b    = arguments[alen-1]
+	var blen = b.length
+	var arr = new Array(alen+blen-1)
+	for (var i=0; i<alen-1; i++) { arr[i]   = arguments[i] }	
+	for (var j=0; j<blen; j++)   { arr[i+j] = b[j] }
+	return arr
     }
+
 
 }

@@ -1,16 +1,35 @@
 (require vegas)
-(+ 1 1)
-(let ((x 1)) x)
-(block :block (return-from :block 42))
-(block :block 
-  (let ((exit (fun (value) (return-from :block value))))
-    (exit 42)))
 
-(set foo (js* "[1,2,3,4]"))
-(. foo 0)
-(. foo 1)
-(. foo 2)
-(. foo 3)
+;; can redefine with generic versions (much) later
 
-(set inc (fun (x) (+ x 1)))
-((. foo "map") inc)
+(define* first (fn* (arr) (. arr 0)))
+(define* rest  (fn* (arr) (.slice arr 1)))
+(define* core-symbol (fn* (name) (.coreSymbol Symbol name)))
+
+;; redefine later
+
+
+(define-macro* define 
+  (fn* (sexp env)
+       (let ((head (first (rest sexp)))
+	     (tail (rest (rest sexp))))
+	 (if (array? head)
+	     (let ((name (first head))
+		   (args (rest head)))
+	       (array (core-symbol "define*")
+		      name
+		      (array (core-symbol "fn*")
+			     args
+			     (array* (core-symbol "block")
+				     name
+				     tail))))
+	     
+	     (array (core-symbol "define*")
+		    head
+		    (first tail))))))
+
+(define (square x) (* x x))
+(prn (square 42))
+(prn (square 81))
+
+

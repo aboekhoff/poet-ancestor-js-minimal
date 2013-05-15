@@ -1,5 +1,13 @@
 // BEGIN vegas.core.js
 
+// may remove log at a later date
+
+function log(string) {
+}
+
+// for now it's invaluable while ironing bugs
+// out of the compiler
+
 var Runtime = {}
 
 function Keyword(name) {
@@ -20,6 +28,9 @@ Keyword.prototype.toString = function() {
 }
 
 function Symbol(namespace, name) {
+    if (!(this instanceof Symbol)) {
+	return new Symbol(namespace, name)
+    }
     this.namespace = namespace;
     this.name      = name;
     this.key       = "#" + name;
@@ -66,6 +77,9 @@ TaggedSymbol.prototype.reify = function() {
 */
 
 function Tag(env) {
+    if (!(this instanceof Tag)) {
+	return new Tag(env)
+    }
     this.id  = ++Tag.nextID
     this.env = env
 }
@@ -290,16 +304,24 @@ Expander.prototype.maybeResolveToDo = function(sexp) {
 }
 
 Expander.prototype.maybeResolveToDefine = function(sexp) {
-    return this.maybeResolveToSpecialForm(sexp) == 'define'
+    return this.maybeResolveToSpecialForm(sexp) == 'define*'
 }
 
 Expander.prototype.maybeResolveToDefineMacro = function(sexp) {    
-    return this.maybeResolveToSpecialForm(sexp) == 'define-macro'
+    return this.maybeResolveToSpecialForm(sexp) == 'define-macro*'
 }
 
 Expander.prototype.macroexpand1 = function(sexp) {
     var macro = this.maybeResolveToMacro(sexp)
-    return macro ? macro(sexp, this) : sexp
+    if (macro) {
+	log('\n[MACROEXPAND1]\n')
+	log(prnstr(sexp))
+	var sexp = macro(sexp, this)
+	log(prnstr(sexp))
+	return sexp
+    } else {
+	return sexp
+    }
 }
 
 Expander.prototype.macroexpand = function(sexp) {
@@ -377,7 +399,17 @@ Expander.prototype.expandArray = function(sexp) {
 }
 
 Expander.prototype.expandCall = function(callee, args) {
-    return [this.expandSexp(callee)].concat(this.expandSexps(args))
+    var callee = this.macroexpand(callee)
+    if (callee instanceof Symbol &&
+        !callee.namespace &&
+	/\.[^\.]+/.test(callee.name)) {
+	var method = callee.name.substring(1)
+	var target = this.expandSexp(args[0])
+	var _args  = this.expandSexps(args.slice(1))
+	return [[Symbol.coreSymbol('.'), target, method]].concat(_args)
+    } else {	
+	return [this.expandSexp(callee)].concat(this.expandSexps(args)) 
+    }
 }
 
 Expander.prototype.expandBody = function(body) {
@@ -405,10 +437,17 @@ Expander.prototype.expandFn = function(args, body) {
     var exp   = this.extendSymbols()
     var _args = []
     for (var i=0; i<args.length; i++) {
-	_args[i] = exp.bindLocal(args[i])
+	var arg = args[i]
+	if (arg instanceof Symbol) {
+	    _args[i] = exp.bindLocal(args[i]) 
+	} else if (arg instanceof Keyword) {
+	    _args[i] = arg
+	} else {
+	    throw Error('invalid object in arglist: ' + arg)
+	}
     }
     var _body = exp.expandBody(body)
-    return [Symbol.coreSymbol('fun'), 
+    return [Symbol.coreSymbol('fn*'), 
 	    _args, 
 	    _body]
 }
@@ -465,10 +504,32 @@ Expander.prototype.expandUnwindProtect = function(clauses) {
     // FIXME
 }
 
+Expander.prototype.expandQuasiquote = function() {
+    
+}
+
 Expander.prototype.expandSpecialForm = function(name, sexp) {
     switch(name) {
 
-    case 'fun':         
+    case 'quote':
+	return [Symbol.coreSymbol('quote'), sexp[1]]
+
+    case 'quasiquote':
+	return this.expandQuasiquote(sexp[1])
+
+    case 'unquote':
+	throw Error('unquote outside of quasiquote')
+
+    case 'unquote-splicing':
+	throw Error('unquote-splicing outside of quasiquote')
+
+    case 'define*':
+	throw Error('define* in expression context')
+
+    case 'define-macro*':
+	throw Error('define-macro* outside of toplevel')
+
+    case 'fn*':         
 	return this.expandFn(sexp[1], sexp.slice(2))
 
     case 'do':
@@ -571,7 +632,66 @@ Expander.prototype.expandSpecialForm = function(name, sexp) {
 
 }
 
+Expander.prototype.createTopLevel = function() {
+    return new Expander.TopLevel(this, [])
+}
 
+// the responsibility of evaluating code (for macros)
+// lies outside the domain of the expander
+// thus it exposes a top level interface which yields
+// a sequence of [EXPRESSION] or [DEFMACRO] forms
+// 
+// toplevel definitions are exported and then changed to
+// set forms
+
+Expander.TopLevel = function(expander, sexps) {
+    this.expander = expander
+    this.sexps    = sexps
+}
+
+Expander.TopLevel.prototype = {
+    push: function() {
+	this.sexps.push.apply(this.sexps, arguments)
+    },
+
+    isEmpty: function() {
+	return this.sexps.length == 0
+    },
+
+    expandNext: function() {
+	loop:for(;;) {
+	    var sexp = this.expander.macroexpand(this.sexps.shift())
+	    show(sexp)
+
+	    if (this.expander.maybeResolveToDo(sexp)) {
+		this.sexps = sexp.slice(1).concat(this.sexps)
+		continue loop
+	    }
+
+	    if (this.expander.maybeResolveToDefineMacro(sexp)) {
+		return ['DEFINE_MACRO', sexp[1], this.expander.expandSexp(sexp[2])]
+	    }
+
+	    if (this.expander.maybeResolveToDefine(sexp)) {
+		var qsym = this.expander.bindGlobal(sexp[1])
+		var sym  = new Symbol(null, qsym.name)
+		Env.addExport(qsym.namespace, sym)
+		return ['EXPRESSION', 
+			[Symbol.coreSymbol('set'),
+			 qsym, 
+			 this.expander.expandSexp(sexp[2])]]
+	    }
+
+	    else {
+		var res = this.expander.expandSexp(sexp)
+		show(res)
+		return ['EXPRESSION', res]
+	    }
+
+	}
+    }
+
+}
 
 // END vegas.expander.js
 
@@ -888,7 +1008,46 @@ function normalizeLabel(obj) {
     return ['LABEL', Env.toKey(obj)]
 }
 
-function normalizeProperty(root, fields) {
+function normalizeFn(args, body) {
+    body = normalize(body)
+
+    var pargs = []
+    var rest  = null
+    var self  = null
+
+    var i=0;
+    while(i<args.length) {
+	var arg = args[i++]
+
+	if (arg instanceof Symbol) {
+	    pargs.push(normalize(arg))
+	} 
+
+	if (arg instanceof Keyword) {
+	    var key = arg
+	    var arg = normalize(args[i++])
+	    switch (key.name) {
+	    case 'rest':
+		rest = arg
+		break
+	    case 'this':
+		self = arg
+		break
+	    }
+	}
+    }        
+
+    if (rest || self) {
+	body = [body]
+	if (rest) { body.unshift(['RESTARGS', rest, pargs.length]) }
+	if (self) { body.unshift(['THIS', self]) }
+	body = ['DO', body]
+    }
+
+    console.log(pargs)
+    console.log(body)
+
+    return ['FUN', pargs, body]
 
 }
 
@@ -916,8 +1075,9 @@ function normalize(sexp) {
 	    }
 	    return node
 
-	case 'fun': 
-	    return ['FUN', normalizeArray(sexp[1]), normalize(sexp[2])]
+	case 'fn*': 
+	    console.log(sexp)
+	    return normalizeFn(sexp[1], sexp[2])
 
 	case 'do' : 
 	    return ['DO', normalizeArray(sexp[1])]
@@ -1054,7 +1214,9 @@ Context.prototype = {
     },
 
     declareLocals: function() {
-	this.block.unshift(['DECLARE', this.scope.level, this.scope.locals])
+	if (this.scope.locals > 0) {
+	    this.block.unshift(['DECLARE', this.scope.level, this.scope.locals]) 
+	}
     },
 
     withBlock: function() {
@@ -1114,7 +1276,7 @@ Context.prototype = {
 	    return this.getVar(node)
 
 	default:
-	    var atom = this.makeLocal()
+	    var atom = this.scope.makeLocal()
 	    this.compile(node, tracerFor(atom))
 	    return atom
 	}
@@ -1132,6 +1294,7 @@ Context.prototype = {
 	var tag = node[0]
 	switch(tag) {
 
+	case 'RESTARGS':
 	case 'RAW':
 	case 'CONST':
 	case 'GLOBAL':	    
@@ -1162,10 +1325,23 @@ Context.prototype = {
 	    var args   = this.toExprs(node[2])
 	    return ['CALL', callee, args]
 
+	case 'THIS':
+	case 'RESTARGS':
 	case 'THROW':
 	case 'RETURN_FROM':
 	    this.compile(node, null)
 	    return ['CONST', null]
+
+	case 'DO':
+	    var body = node[1]
+	    var len  = body.length
+	    for (var i=0; i<len; i++) {
+		if (i < len-1) {
+		    this.compile(body[i], null)
+		} else {
+		    return this.toExpr(body[i])
+		}
+	    }
 
 	default:
 	    var local = this.scope.makeLocal()
@@ -1182,14 +1358,12 @@ Context.prototype = {
     },
 
     compileBody: function(body, tracer) {	
-	for (var i=0; i<body.length; i++) {
-	    var node = body[i]
-	    // everything but last expression is for side effects
-	    // so compile side effects only
-	    if (i == body.length) {
-		this.compile(node, tracer)
+	var len = body.length
+	for (var i=0; i<len; i++) {
+	    if (i < len-1) {
+		this.compile(body[i], null)
 	    } else {
-		this.compile(node, null)
+		this.compile(body[i], tracer)
 	    }
 	}
     },
@@ -1278,9 +1452,33 @@ Context.prototype = {
 	    this.pushExpr(this.toExpr(node), tracer)
 	    break
 
+	case 'RESTARGS':
+	    var local = this.bindLocal(node[1])
+	    this.push(['RESTARGS', local, node[2]])
+	    break
+
+	case 'THIS':
+	    var local = this.bindLocal(node[1])
+	    this.push(['THIS', local])
+	    break	    
+
 	default:
 	    throw Error('bad tag in compile: ' + node[0])
 	}
+    },
+
+    compileTopLevelFragment: function(normalizedSexp) {
+	this.compile(normalizedSexp)
+	this.declareLocals()
+	return this.block
+    },
+
+    compileExpression: function(normalizedSexp) {
+	var ret = this.scope.makeLocal()
+	this.compile(normalizedSexp, tracerFor(ret))
+	this.declareLocals()
+	this.push(['RETURN', ret])	
+	return this.block
     }
 
 }
@@ -1300,7 +1498,15 @@ Emitter.emitProgram = function(program, options) {
     var e = new Emitter()
     if (options) { for (var v in options) { e[v] = options[v] } }
     e.emitStatements(program)
-    return e.buffer.join("")
+    return e.getResult()
+}
+
+Emitter.bake = function(program, options) {
+    var e = new Emitter()
+    if (options) { for (var v in options) { e[v] = options[v] } }
+    e.emitStatements(program)
+    var warhead = Function(e.globalSymbol, e.getResult())
+    return warhead
 }
 
 Emitter.prototype = {
@@ -1309,6 +1515,10 @@ Emitter.prototype = {
     globalSymbol: "RT",
 
     namespaceSeparator: "::",
+
+    getResult: function() {
+	return this.buffer.join("")
+    },
 
     indent: function() {
 	this.indention += this.indentSize
@@ -1343,13 +1553,13 @@ Emitter.prototype = {
 
     emitArray: function(nodes) {
 	this.write("[")
-	this.emitNodes(nodes, ",")
+	this.emitNodes(nodes, ", ")
 	this.write("]")
     },
 
     emitList: function(nodes) {
 	this.write("(")
-	this.emitNodes(nodes, ",")
+	this.emitNodes(nodes, ", ")
 	this.write(")")
     },
 
@@ -1445,6 +1655,21 @@ Emitter.prototype = {
 	
 	switch(tag) {
 
+	case 'IF':
+	    this.write('if(')
+	    this.emit(a)
+	    this.write(') ')
+	    this.emitBlock(b)
+	    this.write(' else ')
+
+	    if (c[0][0] == 'IF') {
+		this.emit(c[0])
+	    } else {
+		this.emitBlock(c)
+	    }
+	    break
+
+
 	case 'DECLARE':
 	    this.write('var ')
 	    var flag = false
@@ -1533,15 +1758,29 @@ Emitter.prototype = {
 	    this.write('throw "NON_LOCAL_EXIT"')
 	    break
 
-	    // FIXME:
-	    // fix to avoid emitting redundant boilerplate
-	case 'IF':
-	    this.write('if (')
+	case 'RESTARGS':
+	    this.emit(a);
+	    this.write(' = [];')	    
+	    this.cr()
+
+	    this.write('for(var i='+b+', ii=arguments.length; i<ii; i++) {')
+
+	    this.indent()
+	    this.cr()
+
 	    this.emit(a)
-	    this.write(') ')
-	    this.emitBlock(b)
-	    this.write(' else ')
-	    this.emitBlock(c)
+	    this.write('.push(arguments[i]);')
+	    
+	    this.dedent()
+	    this.cr()
+
+	    this.write("}")
+	    break
+
+	case 'THIS':
+	    this.emit(a)
+	    this.write(' = this;')
+	    break
 
 	default:
 	    throw Error('unhandled tag in emitter: ' + tag)
@@ -1571,7 +1810,7 @@ var RT = {
 	default:
 	    var r = x + y
 	    var i = 2;
-	    while (i<arguments.length) { r += arguments[i] }
+	    while (i<arguments.length) { r += arguments[i++] }
 	    return r
 	}
     },
@@ -1584,7 +1823,7 @@ var RT = {
 	default:
 	    var r = x * y
 	    var i = 2;
-	    while (i<arguments.length) { r *= arguments[i] }
+	    while (i<arguments.length) { r *= arguments[i++] }
 	    return r
 	}
     },
@@ -1597,7 +1836,7 @@ var RT = {
 	default:
 	    var r = x - y
 	    var i = 2;
-	    while (i<arguments.length) { r -= arguments[i] }
+	    while (i<arguments.length) { r -= arguments[i++] }
 	    return r
 	}
     },
@@ -1610,7 +1849,7 @@ var RT = {
 	default:
 	    var r = x/y
 	    var i = 2;
-	    while (i<arguments.length) { r /= arguments[i] }
+	    while (i<arguments.length) { r /= arguments[i++] }
 	    return r
 	}
     },
@@ -1621,7 +1860,39 @@ var RT = {
 
     'vegas::div' : function(x, y) {
 	return Math.floor(x/y)
+    },
+
+    'vegas::array?' : Array.isArray,
+
+    'vegas::boolean?' : function(x) {
+	return typeof x == 'boolean'
+    },
+
+    'vegas::number?' : function(x) {
+	return typeof x == 'number'
+    },
+
+    'vegas::string?' : function(x) {
+	return typeof x == 'string'
+    },
+
+    'vegas::array' : function() {
+	var len = arguments.length
+	var arr = new Array(len)
+	for (var i=0; i<len; i++) { arr[i] = arguments[i] }
+	return arr
+    },
+
+    'vegas::array*' : function() {
+	var alen = arguments.length
+	var b    = arguments[alen-1]
+	var blen = b.length
+	var arr = new Array(alen+blen-1)
+	for (var i=0; i<alen-1; i++) { arr[i]   = arguments[i] }	
+	for (var j=0; j<blen; j++)   { arr[i+j] = b[j] }
+	return arr
     }
+
 
 }
 
@@ -1687,76 +1958,146 @@ function println() {
     out.write("\n")
 }
 
+function prnstr() {
+    var _out = out
+    var buf  = []
+    
+    out = { write: function(x) { buf.push(x) } }
+    prn.apply(null, arguments)
+
+    out = _out
+    return buf.join("")
+}
+
 function read(string) {
     var rdr = Reader.create(string, 'test')
     return rdr.readSexp()
 }
 
-[
-    ['foo',   Symbol],
-    [':bar',  Keyword],
-    ['#t',    Boolean],    
-    ['42',    Number],
-    ['"foo"', String],
-    ['()',    Array]
-].forEach(function(pair) {
-    var string = pair[0]
-    var obj    = read(string)
-    var type   = pair[1]
-    console.log(string, "=>", typeof obj, obj)
-});
-
-
-var expander = new Expander(
-    'test',
-    Env.create('test'), 
-    Env.createEmpty()
-)
-
-function expand(src) {
-    console.log()
-
-    var sexp = read(src)    
-    prn(sexp)
-
-    var result = expander.expandSexp(sexp)
-    prn(result)
-
-    var norm = normalize(result)
-    prn(norm)
-
-    var cmp = Context.compile(norm, true)
-
-    
-    return txt
-
-}
-
 var inspect = require('util').inspect
+
 function show(x) {
     process.stdout.write(inspect(x, false, null))
     process.stdout.write("\n")
 }
 
+function exec(src) {
+    return Function('RT', src)(RT)
+}
+
+function evaluateTopLevelFragment(sexp) {
+    var nsexp   = normalize(sexp) 
+
+    log('\n[NORMALIZE]\n') 
+    log(prnstr(nsexp))
+
+    var jsast   = Context.create().compileTopLevelFragment(nsexp)
+
+    log('\n[COMPILE]\n')
+    log(prnstr(jsast))
+
+    var warhead = Emitter.bake(jsast)
+
+    log('\n[EMIT]\n')
+    log(warhead.toString())
+    log('\n')
+
+    return warhead(RT)
+}
+
+function evaluateMacroDefinition(sexp) {
+    var nsexp = normalize(sexp)
+
+    log('\n[NORMALIZE]\n') 
+    log(prnstr(nsexp))
+
+    var jsast = Context.create().compileExpression(nsexp)
+
+    log('\n[COMPILE_MACRO]\n')
+    log(prnstr(jsast))
+
+    var warhead = Emitter.bake(jsast)
+
+    log('\n[EMIT_MACRO]\n')
+    log(warhead.toString())
+    log('\n')
+
+    return warhead(RT)
+}
+
 exports.load = function(file) {
+    log.clear()
+
     var fs  = require('fs')
     var txt = fs.readFileSync(file, 'utf8')
+    var buf = []
 
     var rdr = Reader.create(txt, file)
-    
+    var exp = new Expander('test',
+			   Env.create('test'), 
+			   Env.createEmpty())
+    var top = exp.createTopLevel()
+
     while (!rdr.isEmpty()) {
+
+	var rawsexp = rdr.readSexp()
+
+	log('[READ SEXP]\n')
+	log(prnstr(rawsexp))
+
+	top.push(rawsexp)
+
+	while(!top.isEmpty()) {
+	    var expr = top.expandNext()
+
+	    log('\n[EXPAND SEXP]\n')
+	    log(prnstr(expr))
+
+	    var tag = expr[0]
+
+	    switch(tag) {
+
+	    case 'EXPRESSION':
+		evaluateTopLevelFragment(expr[1])
+		break 
+
+	    case 'DEFINE_MACRO':
+		var transformer = evaluateMacroDefinition(expr[2])
+		var symbol      = expr[1]				
+		exp.symbols.put(symbol, transformer)
+		break				
+	    }
+
+	}
+
+    }
+    
+    /*
+    while (!rdr.isEmpty()) {
+	var ctx = Context.create()
 	var sexp   = rdr.readSexp(); prn(sexp)
 	var exp    = expander.expandSexp(sexp); prn(exp)
 	var norm   = normalize(exp); show(norm)
-	var cmp    = Context.compile(norm, true); show(cmp)
-	var src    = Emitter.emitProgram(cmp); console.log(src)	
-	var res    = exec(src); prn(res)
-	console.log()
-    }
-}
 
-function exec(src) {
-    return Function('RT', src)(RT)
+	ctx.compile(norm, null)
+	ctx.declareLocals()
+	
+	var cmp = ctx.block
+	var src = Emitter.emitProgram(cmp); 
+
+	if (ctx.scope.locals > 0) {
+	    buf.push("\n!function() {" + src + "\n}();")
+	} else {
+	    buf.push(src)
+	}
+
+	var res = exec(src); prn(res)		
+
+	console.log()
+
+    }
+    */
+
 }
 
 // FINAL INITIALIZATION 
@@ -1764,14 +2105,21 @@ var base = Env.create('vegas', true)
 var js   = Env.create('js', true)
 
 var specialFormNames = [
-    'define', 'define-macro',
-    'fun', 'do', 'if', 'let', 'letrec', 'unwind-protect', 
+    'define*', 'define-macro*', 
+    'quote', 'quasiquote', 'unquote', 'unquote-splicing',  
+    'fn*', 'do', 'if', 'let', 'letrec', 'unwind-protect', 
     'set', 'block', 'loop', 'return-from', 'throw', 'js*', '.'
 ].forEach(function(name) {
     var symbol = new Symbol(null, name)
     base.put(symbol, name)    
     Env.addExport('vegas', symbol)
 })
+
+RT['vegas::Symbol']  = Symbol
+RT['vegas::Keyword'] = Keyword
+RT['vegas::Tag']     = Tag
+RT['vegas::prn']     = prn
+RT['vegas::runtime'] = RT
 
 // quick hack to make sure to add any builtins defined in RT
 for (var v in RT) {    
@@ -1805,5 +2153,20 @@ expand('(throw shit-at-the-wall)')
 expand('(fun (x) (* x x))')
 expand('(block :the-block ())')
 */
+
+
+// setup logging
+
+var fs = require('fs')
+
+log = function(txt) {
+    fs.appendFile(log.file, txt)
+}
+
+log.file = 'log.txt'
+
+log.clear = function() {
+    fs.writeFile(log.file, '')
+}
 
 // END vegas.main.js

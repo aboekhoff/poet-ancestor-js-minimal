@@ -44,16 +44,24 @@ Expander.prototype.maybeResolveToDo = function(sexp) {
 }
 
 Expander.prototype.maybeResolveToDefine = function(sexp) {
-    return this.maybeResolveToSpecialForm(sexp) == 'define'
+    return this.maybeResolveToSpecialForm(sexp) == 'define*'
 }
 
 Expander.prototype.maybeResolveToDefineMacro = function(sexp) {    
-    return this.maybeResolveToSpecialForm(sexp) == 'define-macro'
+    return this.maybeResolveToSpecialForm(sexp) == 'define-macro*'
 }
 
 Expander.prototype.macroexpand1 = function(sexp) {
     var macro = this.maybeResolveToMacro(sexp)
-    return macro ? macro(sexp, this) : sexp
+    if (macro) {
+	log('\n[MACROEXPAND1]\n')
+	log(prnstr(sexp))
+	var sexp = macro(sexp, this)
+	log(prnstr(sexp))
+	return sexp
+    } else {
+	return sexp
+    }
 }
 
 Expander.prototype.macroexpand = function(sexp) {
@@ -131,7 +139,17 @@ Expander.prototype.expandArray = function(sexp) {
 }
 
 Expander.prototype.expandCall = function(callee, args) {
-    return [this.expandSexp(callee)].concat(this.expandSexps(args))
+    var callee = this.macroexpand(callee)
+    if (callee instanceof Symbol &&
+        !callee.namespace &&
+	/\.[^\.]+/.test(callee.name)) {
+	var method = callee.name.substring(1)
+	var target = this.expandSexp(args[0])
+	var _args  = this.expandSexps(args.slice(1))
+	return [[Symbol.coreSymbol('.'), target, method]].concat(_args)
+    } else {	
+	return [this.expandSexp(callee)].concat(this.expandSexps(args)) 
+    }
 }
 
 Expander.prototype.expandBody = function(body) {
@@ -159,10 +177,17 @@ Expander.prototype.expandFn = function(args, body) {
     var exp   = this.extendSymbols()
     var _args = []
     for (var i=0; i<args.length; i++) {
-	_args[i] = exp.bindLocal(args[i])
+	var arg = args[i]
+	if (arg instanceof Symbol) {
+	    _args[i] = exp.bindLocal(args[i]) 
+	} else if (arg instanceof Keyword) {
+	    _args[i] = arg
+	} else {
+	    throw Error('invalid object in arglist: ' + arg)
+	}
     }
     var _body = exp.expandBody(body)
-    return [Symbol.coreSymbol('fun'), 
+    return [Symbol.coreSymbol('fn*'), 
 	    _args, 
 	    _body]
 }
@@ -219,10 +244,32 @@ Expander.prototype.expandUnwindProtect = function(clauses) {
     // FIXME
 }
 
+Expander.prototype.expandQuasiquote = function() {
+    
+}
+
 Expander.prototype.expandSpecialForm = function(name, sexp) {
     switch(name) {
 
-    case 'fun':         
+    case 'quote':
+	return [Symbol.coreSymbol('quote'), sexp[1]]
+
+    case 'quasiquote':
+	return this.expandQuasiquote(sexp[1])
+
+    case 'unquote':
+	throw Error('unquote outside of quasiquote')
+
+    case 'unquote-splicing':
+	throw Error('unquote-splicing outside of quasiquote')
+
+    case 'define*':
+	throw Error('define* in expression context')
+
+    case 'define-macro*':
+	throw Error('define-macro* outside of toplevel')
+
+    case 'fn*':         
 	return this.expandFn(sexp[1], sexp.slice(2))
 
     case 'do':
@@ -325,4 +372,63 @@ Expander.prototype.expandSpecialForm = function(name, sexp) {
 
 }
 
+Expander.prototype.createTopLevel = function() {
+    return new Expander.TopLevel(this, [])
+}
 
+// the responsibility of evaluating code (for macros)
+// lies outside the domain of the expander
+// thus it exposes a top level interface which yields
+// a sequence of [EXPRESSION] or [DEFMACRO] forms
+// 
+// toplevel definitions are exported and then changed to
+// set forms
+
+Expander.TopLevel = function(expander, sexps) {
+    this.expander = expander
+    this.sexps    = sexps
+}
+
+Expander.TopLevel.prototype = {
+    push: function() {
+	this.sexps.push.apply(this.sexps, arguments)
+    },
+
+    isEmpty: function() {
+	return this.sexps.length == 0
+    },
+
+    expandNext: function() {
+	loop:for(;;) {
+	    var sexp = this.expander.macroexpand(this.sexps.shift())
+	    show(sexp)
+
+	    if (this.expander.maybeResolveToDo(sexp)) {
+		this.sexps = sexp.slice(1).concat(this.sexps)
+		continue loop
+	    }
+
+	    if (this.expander.maybeResolveToDefineMacro(sexp)) {
+		return ['DEFINE_MACRO', sexp[1], this.expander.expandSexp(sexp[2])]
+	    }
+
+	    if (this.expander.maybeResolveToDefine(sexp)) {
+		var qsym = this.expander.bindGlobal(sexp[1])
+		var sym  = new Symbol(null, qsym.name)
+		Env.addExport(qsym.namespace, sym)
+		return ['EXPRESSION', 
+			[Symbol.coreSymbol('set'),
+			 qsym, 
+			 this.expander.expandSexp(sexp[2])]]
+	    }
+
+	    else {
+		var res = this.expander.expandSexp(sexp)
+		show(res)
+		return ['EXPRESSION', res]
+	    }
+
+	}
+    }
+
+}
