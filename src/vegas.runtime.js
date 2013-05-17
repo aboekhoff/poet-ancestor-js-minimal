@@ -56,6 +56,71 @@ var RT = {
 	}
     },
 
+    'vegas::<' : function(x, y) {
+	switch (arguments.length) {
+	    case 0: throw Error('vegas::< requires at least one argument')
+	    case 1: return true
+	    case 2: return x<y
+	    default:
+	    var r = x<y
+	    var i = 2
+	    while (i<arguments.length && r) { x=y; y=arguments[i]; r=x<y }
+	    return r	    
+	}
+    },
+
+    'vegas::>' : function(x, y) {
+	switch (arguments.length) {
+	    case 0: throw Error('vegas::> requires at least one argument')
+	    case 1: return true
+	    case 2: return x>y
+	    default:
+	    var r = x>y
+	    var i = 2
+	    while (i<arguments.length && r) { x=y; y=arguments[i]; r=x>y }
+	    return r	    
+	}
+    },
+
+    'vegas::<=' : function(x, y) {
+	switch (arguments.length) {
+	    case 0: throw Error('vegas::<= requires at least one argument')
+	    case 1: return true
+	    case 2: return x<=y
+	    default:
+	    var r = x<=y
+	    var i = 2
+	    while (i<arguments.length && r) { x=y; y=arguments[i]; r=x<=y }
+	    return r	    
+	}
+    },
+
+    'vegas::>=' : function(x, y) {
+	switch (arguments.length) {
+	    case 0: throw Error('vegas::>= requires at least one argument')
+	    case 1: return true
+	    case 2: return x>=y
+	    default:
+	    var r = x>=y
+	    var i = 2
+	    while (i<arguments.length && r) { x=y; y=arguments[i]; r=x>=y }
+	    return r	    
+	}
+    },
+
+    'vegas::=' : function(x, y) {
+	switch (arguments.length) {
+	    case 0: throw Error('vegas::< requires at least one argument')
+	    case 1: return true
+	    case 2: return x===y
+	    default:
+	    var r = x===y
+	    var i = 2
+	    while (i<arguments.length && r) { x=y; y=arguments[i]; r=x===y }
+	    return r	    
+	}
+    },
+
     'vegas::mod' : function(x, y) {
 	return x % y
     },

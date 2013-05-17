@@ -55,7 +55,11 @@ Symbol.prototype.applyTag = function(tag) {
 }
 
 Symbol.prototype.reify = function() {
-    return new Symbol(null, this.name)
+    if (this.namespace) {
+	return this
+    } else {
+	 return new Symbol(null, this.name)
+    }
 }
 
 function TaggedSymbol(symbol, tag) {

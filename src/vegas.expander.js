@@ -233,8 +233,10 @@ Expander.prototype.expandLetrec = function(bindings, body) {
 }
 
 Expander.prototype.expandLabel = function(label) {
-    if (this.labels.get(label)) {
-	return label
+    var sentinel   = {}
+    var denotation = this.labels.get(label, sentinel)
+    if (denotation != sentinel) {
+	return denotation
     } else {
 	throw Error('label: ' + label + ' is not in scope')
    }
@@ -265,6 +267,12 @@ Expander.prototype.expandQuasiquote = function(sexp) {
     function q(x) {
 	if (isUnquote(x)) {
 	    return x[1]
+	}
+
+	if (isQuasiquote(x)) {
+	    return [Symbol.coreSymbol('quote'), 
+		    [Symbol.coreSymbol('quasiquote'), 
+		     x[1]]]
 	}
 
 	if (x instanceof Symbol) {

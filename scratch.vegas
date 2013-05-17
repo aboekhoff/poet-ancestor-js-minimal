@@ -13,20 +13,21 @@
   (fn* (sexp env)
        (let ((head (first (rest sexp)))
 	     (tail (rest (rest sexp))))
+
 	 (if (array? head)
+
 	     (let ((name (first head))
 		   (args (rest head)))
-	       (array (core-symbol "define*")
-		      name
-		      (array (core-symbol "fn*")
-			     args
-			     (array* (core-symbol "block")
-				     name
-				     tail))))
+
+	       `(,(core-symbol "define*")
+		 ,name
+		 (,(core-symbol "fn*")
+		  ,args
+		  (,(core-symbol "block")
+		   ,name
+		   ,@tail))))
 	     
-	     (array (core-symbol "define*")
-		    head
-		    (first tail))))))
+	     `(,core-symbol "define*" ,head ,(first tail))))))
 
 (define (square x) (* x x))
 (prn (square 42))
@@ -34,19 +35,11 @@
 
 (define (but-last-arg _ :rest xs) xs)
 
-(prn (but-last-arg 1 2 3 4))
-(prn (but-last-arg "a" "b" "c" "d"))
+(let ((x 0))
+  (loop 
+   (if (< x 10)
+       (do (prn :counter x)
+	   (set x (+ x 1)))
+       (return-from #nil))))
 
-(prn 'foo)
-(prn :foo)
-
-(prn `42)
-(prn `foo)
-(prn `(foo bar :baz))
-
-(define bar "shazam!")
-
-(define numbers '(1 2 3 4 5 6))
-
-(prn `(foo ,bar :baz))
-(prn `(foo :numbers ,@numbers))
+(prn `(:a `(:b ,:c ,@xs)))

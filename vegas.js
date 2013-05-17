@@ -57,7 +57,11 @@ Symbol.prototype.applyTag = function(tag) {
 }
 
 Symbol.prototype.reify = function() {
-    return new Symbol(null, this.name)
+    if (this.namespace) {
+	return this
+    } else {
+	 return new Symbol(null, this.name)
+    }
 }
 
 function TaggedSymbol(symbol, tag) {
@@ -499,8 +503,10 @@ Expander.prototype.expandLetrec = function(bindings, body) {
 }
 
 Expander.prototype.expandLabel = function(label) {
-    if (this.labels.get(label)) {
-	return label
+    var sentinel   = {}
+    var denotation = this.labels.get(label, sentinel)
+    if (denotation != sentinel) {
+	return denotation
     } else {
 	throw Error('label: ' + label + ' is not in scope')
    }
@@ -531,6 +537,12 @@ Expander.prototype.expandQuasiquote = function(sexp) {
     function q(x) {
 	if (isUnquote(x)) {
 	    return x[1]
+	}
+
+	if (isQuasiquote(x)) {
+	    return [Symbol.coreSymbol('quote'), 
+		    [Symbol.coreSymbol('quasiquote'), 
+		     x[1]]]
 	}
 
 	if (x instanceof Symbol) {
@@ -1973,6 +1985,71 @@ var RT = {
 	    var i = 2;
 	    while (i<arguments.length) { r /= arguments[i++] }
 	    return r
+	}
+    },
+
+    'vegas::<' : function(x, y) {
+	switch (arguments.length) {
+	    case 0: throw Error('vegas::< requires at least one argument')
+	    case 1: return true
+	    case 2: return x<y
+	    default:
+	    var r = x<y
+	    var i = 2
+	    while (i<arguments.length && r) { x=y; y=arguments[i]; r=x<y }
+	    return r	    
+	}
+    },
+
+    'vegas::>' : function(x, y) {
+	switch (arguments.length) {
+	    case 0: throw Error('vegas::> requires at least one argument')
+	    case 1: return true
+	    case 2: return x>y
+	    default:
+	    var r = x>y
+	    var i = 2
+	    while (i<arguments.length && r) { x=y; y=arguments[i]; r=x>y }
+	    return r	    
+	}
+    },
+
+    'vegas::<=' : function(x, y) {
+	switch (arguments.length) {
+	    case 0: throw Error('vegas::<= requires at least one argument')
+	    case 1: return true
+	    case 2: return x<=y
+	    default:
+	    var r = x<=y
+	    var i = 2
+	    while (i<arguments.length && r) { x=y; y=arguments[i]; r=x<=y }
+	    return r	    
+	}
+    },
+
+    'vegas::>=' : function(x, y) {
+	switch (arguments.length) {
+	    case 0: throw Error('vegas::>= requires at least one argument')
+	    case 1: return true
+	    case 2: return x>=y
+	    default:
+	    var r = x>=y
+	    var i = 2
+	    while (i<arguments.length && r) { x=y; y=arguments[i]; r=x>=y }
+	    return r	    
+	}
+    },
+
+    'vegas::=' : function(x, y) {
+	switch (arguments.length) {
+	    case 0: throw Error('vegas::< requires at least one argument')
+	    case 1: return true
+	    case 2: return x===y
+	    default:
+	    var r = x===y
+	    var i = 2
+	    while (i<arguments.length && r) { x=y; y=arguments[i]; r=x===y }
+	    return r	    
 	}
     },
 
