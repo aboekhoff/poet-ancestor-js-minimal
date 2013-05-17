@@ -244,18 +244,100 @@ Expander.prototype.expandUnwindProtect = function(clauses) {
     // FIXME
 }
 
-Expander.prototype.expandQuasiquote = function() {
+// quasiquoter
+
+Expander.prototype.expandQuasiquote = function(sexp) {
+
+    var ex = this
+
+    function isQuasiquote(x) {
+	return ex.maybeResolveToSpecialForm(x) == 'quasiquote'
+    }
+
+    function isUnquote(x) {
+	return ex.maybeResolveToSpecialForm(x) == 'unquote'
+    }
+
+    function isUnquoteSplicing(x) {
+	return ex.maybeResolveToSpecialForm(x) == 'unquote-splicing'
+    }
+
+    function q(x) {
+	if (isUnquote(x)) {
+	    return x[1]
+	}
+
+	if (x instanceof Symbol) {
+	    return [Symbol.coreSymbol('quote'), x]
+	}
+
+	if (x instanceof Array) {
+	    return [Symbol.coreSymbol('concat')].concat(x.map(qq))
+	}
+
+	else {
+	    return x
+	}
+
+    }
+
+    function qq(x) {
+	if (isUnquoteSplicing(x)) {
+	    return x[1]
+	} 
+
+	else {
+	    return [Symbol.coreSymbol('array'), q(x)]
+	}
+
+    }
+
+    // main
     
+    if (isUnquoteSplicing(sexp)) {
+	throw Error('unquote splicing outside of quasiquote')
+    } 
+
+    else {
+	return q(sexp)
+    }
+
+}
+
+Expander.prototype.expandQuote = function(sexp) {
+
+    function q(x) {
+	if (x instanceof Symbol) {
+	    x = x.reify()
+	    return [Symbol.coreSymbol('Symbol'), x.namespace, x.name]	    
+	}
+
+	if (x instanceof Array) {
+	    return [Symbol.coreSymbol('array')].concat(x.map(q))
+	}
+
+	else {
+	    return x
+	}
+
+    }
+
+    return q(sexp)
+
 }
 
 Expander.prototype.expandSpecialForm = function(name, sexp) {
     switch(name) {
 
     case 'quote':
-	return [Symbol.coreSymbol('quote'), sexp[1]]
+	return this.expandQuote(sexp[1])
 
-    case 'quasiquote':
-	return this.expandQuasiquote(sexp[1])
+    case 'quasiquote':		
+	var res = this.expandQuasiquote(sexp[1])
+	console.log('[QUASIQUOTE]\n')
+	prn(sexp[1])
+	prn(res)
+	return this.expandSexp(res)
 
     case 'unquote':
 	throw Error('unquote outside of quasiquote')
@@ -401,7 +483,7 @@ Expander.TopLevel.prototype = {
     expandNext: function() {
 	loop:for(;;) {
 	    var sexp = this.expander.macroexpand(this.sexps.shift())
-	    show(sexp)
+	    // show(sexp)
 
 	    if (this.expander.maybeResolveToDo(sexp)) {
 		this.sexps = sexp.slice(1).concat(this.sexps)
@@ -424,7 +506,7 @@ Expander.TopLevel.prototype = {
 
 	    else {
 		var res = this.expander.expandSexp(sexp)
-		show(res)
+		// show(res)
 		return ['EXPRESSION', res]
 	    }
 

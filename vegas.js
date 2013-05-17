@@ -31,6 +31,12 @@ function Symbol(namespace, name) {
     if (!(this instanceof Symbol)) {
 	return new Symbol(namespace, name)
     }
+
+    if (arguments.length == 1) {
+	name      = namespace
+	namespace == null
+    }    
+
     this.namespace = namespace;
     this.name      = name;
     this.key       = "#" + name;
@@ -504,18 +510,100 @@ Expander.prototype.expandUnwindProtect = function(clauses) {
     // FIXME
 }
 
-Expander.prototype.expandQuasiquote = function() {
+// quasiquoter
+
+Expander.prototype.expandQuasiquote = function(sexp) {
+
+    var ex = this
+
+    function isQuasiquote(x) {
+	return ex.maybeResolveToSpecialForm(x) == 'quasiquote'
+    }
+
+    function isUnquote(x) {
+	return ex.maybeResolveToSpecialForm(x) == 'unquote'
+    }
+
+    function isUnquoteSplicing(x) {
+	return ex.maybeResolveToSpecialForm(x) == 'unquote-splicing'
+    }
+
+    function q(x) {
+	if (isUnquote(x)) {
+	    return x[1]
+	}
+
+	if (x instanceof Symbol) {
+	    return [Symbol.coreSymbol('quote'), x]
+	}
+
+	if (x instanceof Array) {
+	    return [Symbol.coreSymbol('concat')].concat(x.map(qq))
+	}
+
+	else {
+	    return x
+	}
+
+    }
+
+    function qq(x) {
+	if (isUnquoteSplicing(x)) {
+	    return x[1]
+	} 
+
+	else {
+	    return [Symbol.coreSymbol('array'), q(x)]
+	}
+
+    }
+
+    // main
     
+    if (isUnquoteSplicing(sexp)) {
+	throw Error('unquote splicing outside of quasiquote')
+    } 
+
+    else {
+	return q(sexp)
+    }
+
+}
+
+Expander.prototype.expandQuote = function(sexp) {
+
+    function q(x) {
+	if (x instanceof Symbol) {
+	    x = x.reify()
+	    return [Symbol.coreSymbol('Symbol'), x.namespace, x.name]	    
+	}
+
+	if (x instanceof Array) {
+	    return [Symbol.coreSymbol('array')].concat(x.map(q))
+	}
+
+	else {
+	    return x
+	}
+
+    }
+
+    return q(sexp)
+
 }
 
 Expander.prototype.expandSpecialForm = function(name, sexp) {
     switch(name) {
 
     case 'quote':
-	return [Symbol.coreSymbol('quote'), sexp[1]]
+	return this.expandQuote(sexp[1])
 
-    case 'quasiquote':
-	return this.expandQuasiquote(sexp[1])
+    case 'quasiquote':		
+	var res = this.expandQuasiquote(sexp[1])
+	console.log('[QUASIQUOTE]\n')
+	prn(sexp[1])
+	prn(res)
+	return this.expandSexp(res)
 
     case 'unquote':
 	throw Error('unquote outside of quasiquote')
@@ -661,7 +749,7 @@ Expander.TopLevel.prototype = {
     expandNext: function() {
 	loop:for(;;) {
 	    var sexp = this.expander.macroexpand(this.sexps.shift())
-	    show(sexp)
+	    // show(sexp)
 
 	    if (this.expander.maybeResolveToDo(sexp)) {
 		this.sexps = sexp.slice(1).concat(this.sexps)
@@ -684,7 +772,7 @@ Expander.TopLevel.prototype = {
 
 	    else {
 		var res = this.expander.expandSexp(sexp)
-		show(res)
+		// show(res)
 		return ['EXPRESSION', res]
 	    }
 
@@ -1044,8 +1132,8 @@ function normalizeFn(args, body) {
 	body = ['DO', body]
     }
 
-    console.log(pargs)
-    console.log(body)
+    // console.log(pargs)
+    // console.log(body)
 
     return ['FUN', pargs, body]
 
@@ -1054,11 +1142,15 @@ function normalizeFn(args, body) {
 var NULL_LABEL = normalizeLabel(null)
 
 function normalize(sexp) {
+    if (sexp instanceof Keyword) {
+	return ['KEYWORD', sexp.name]
+    }
+
     if (sexp instanceof Symbol) {
 	return sexp.namespace ? 
 	    ['GLOBAL', sexp.namespace, sexp.name] :
 	    ['LOCAL', sexp.name]
-    } 
+    }     
 
     if (!(sexp instanceof Array)) {
 	return ['CONST', sexp]
@@ -1076,7 +1168,7 @@ function normalize(sexp) {
 	    return node
 
 	case 'fn*': 
-	    console.log(sexp)
+	    // console.log(sexp)
 	    return normalizeFn(sexp[1], sexp[2])
 
 	case 'do' : 
@@ -1122,6 +1214,9 @@ function normalize(sexp) {
 
 	case 'js*':
 	    return ['RAW', sexp[1]]
+
+	case 'new':
+	    return ['NEW', normalize(sexp[1]), normalizeArray(sexp.slice(2))]
 
 	}   
     }
@@ -1300,6 +1395,11 @@ Context.prototype = {
 	case 'GLOBAL':	    
 	    return node
 
+	case 'KEYWORD':
+	    return ['CALL', 
+		    ['GLOBAL', 'vegas', 'Keyword'], 
+		    [['CONST', node[1]]]]
+
 	case 'PROPERTY':
 	    return ['PROPERTY', this.toExpr(node[1]), this.toExpr(node[2])]
 
@@ -1324,6 +1424,11 @@ Context.prototype = {
 	    var callee = this.toExpr(node[1])
 	    var args   = this.toExprs(node[2])
 	    return ['CALL', callee, args]
+
+	case 'NEW':
+	    var callee = this.toExpr(node[1])
+	    var args   = this.toExprs(node[2])
+	    return ['NEW', callee, args]
 
 	case 'THIS':
 	case 'RESTARGS':
@@ -1377,6 +1482,10 @@ Context.prototype = {
 	case 'CONST':
 	case 'GLOBAL':
 	    this.pushPure(node, tracer)
+	    break
+
+	case 'KEYWORD':
+	    this.pushPure(this.toExpr(node), tracer)
 	    break
 
 	case 'LOCAL':
@@ -1448,6 +1557,7 @@ Context.prototype = {
 	    this.pushPure(this.toExpr(node), tracer)
 	    break
 
+	case 'NEW':
 	case 'CALL':
 	    this.pushExpr(this.toExpr(node), tracer)
 	    break
@@ -1515,6 +1625,11 @@ Emitter.prototype = {
     globalSymbol: "RT",
 
     namespaceSeparator: "::",
+
+    emitProgram: function(program) {
+	this.emitStatements(program)
+	return this.getResult()
+    },
 
     getResult: function() {
 	return this.buffer.join("")
@@ -1691,7 +1806,14 @@ Emitter.prototype = {
 	    break
 
 	case 'CONST':
-	    this.write(typeof a == 'string' ? JSON.stringify(a) : a)
+	    if (typeof a == 'string') {
+		this.write(JSON.stringify(a))
+	    }
+
+	    else {
+		this.write('' + a)
+	    }
+
 	    break;
 
 	case 'GLOBAL': 
@@ -1787,7 +1909,7 @@ Emitter.prototype = {
 
 	}
 
-    },
+    }
 
 }
 
@@ -1891,6 +2013,19 @@ var RT = {
 	for (var i=0; i<alen-1; i++) { arr[i]   = arguments[i] }	
 	for (var j=0; j<blen; j++)   { arr[i+j] = b[j] }
 	return arr
+    },
+
+    'vegas::concat' : function() {
+	var res = []
+	for (var i=0; i<arguments.length; i++) {
+	    var xs = arguments[i]
+	    if (xs) {
+		for (var j=0; j<xs.length; j++) {
+		    res.push(xs[j])
+		}
+	    }
+	}
+	return res
     }
 
 
@@ -1996,11 +2131,15 @@ function evaluateTopLevelFragment(sexp) {
     log('\n[COMPILE]\n')
     log(prnstr(jsast))
 
-    var warhead = Emitter.bake(jsast)
+    // show(jsast)
 
-    log('\n[EMIT]\n')
-    log(warhead.toString())
-    log('\n')
+    var emitter = new Emitter()
+    var src     = emitter.emitProgram(jsast)
+    var warhead = Function(emitter.globalSymbol, src)
+
+    log('\n[EMIT]')
+    log(src)
+    log('\n\n')
 
     return warhead(RT)
 }

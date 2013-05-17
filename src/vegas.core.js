@@ -29,6 +29,12 @@ function Symbol(namespace, name) {
     if (!(this instanceof Symbol)) {
 	return new Symbol(namespace, name)
     }
+
+    if (arguments.length == 1) {
+	name      = namespace
+	namespace == null
+    }    
+
     this.namespace = namespace;
     this.name      = name;
     this.key       = "#" + name;

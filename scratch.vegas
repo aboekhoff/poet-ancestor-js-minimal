@@ -32,4 +32,21 @@
 (prn (square 42))
 (prn (square 81))
 
+(define (but-last-arg _ :rest xs) xs)
 
+(prn (but-last-arg 1 2 3 4))
+(prn (but-last-arg "a" "b" "c" "d"))
+
+(prn 'foo)
+(prn :foo)
+
+(prn `42)
+(prn `foo)
+(prn `(foo bar :baz))
+
+(define bar "shazam!")
+
+(define numbers '(1 2 3 4 5 6))
+
+(prn `(foo ,bar :baz))
+(prn `(foo :numbers ,@numbers))

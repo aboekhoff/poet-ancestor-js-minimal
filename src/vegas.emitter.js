@@ -25,6 +25,11 @@ Emitter.prototype = {
 
     namespaceSeparator: "::",
 
+    emitProgram: function(program) {
+	this.emitStatements(program)
+	return this.getResult()
+    },
+
     getResult: function() {
 	return this.buffer.join("")
     },
@@ -200,7 +205,14 @@ Emitter.prototype = {
 	    break
 
 	case 'CONST':
-	    this.write(typeof a == 'string' ? JSON.stringify(a) : a)
+	    if (typeof a == 'string') {
+		this.write(JSON.stringify(a))
+	    }
+
+	    else {
+		this.write('' + a)
+	    }
+
 	    break;
 
 	case 'GLOBAL': 
@@ -296,7 +308,7 @@ Emitter.prototype = {
 
 	}
 
-    },
+    }
 
 }
 

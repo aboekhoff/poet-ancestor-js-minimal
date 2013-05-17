@@ -48,8 +48,8 @@ function normalizeFn(args, body) {
 	body = ['DO', body]
     }
 
-    console.log(pargs)
-    console.log(body)
+    // console.log(pargs)
+    // console.log(body)
 
     return ['FUN', pargs, body]
 
@@ -58,11 +58,15 @@ function normalizeFn(args, body) {
 var NULL_LABEL = normalizeLabel(null)
 
 function normalize(sexp) {
+    if (sexp instanceof Keyword) {
+	return ['KEYWORD', sexp.name]
+    }
+
     if (sexp instanceof Symbol) {
 	return sexp.namespace ? 
 	    ['GLOBAL', sexp.namespace, sexp.name] :
 	    ['LOCAL', sexp.name]
-    } 
+    }     
 
     if (!(sexp instanceof Array)) {
 	return ['CONST', sexp]
@@ -80,7 +84,7 @@ function normalize(sexp) {
 	    return node
 
 	case 'fn*': 
-	    console.log(sexp)
+	    // console.log(sexp)
 	    return normalizeFn(sexp[1], sexp[2])
 
 	case 'do' : 
@@ -126,6 +130,9 @@ function normalize(sexp) {
 
 	case 'js*':
 	    return ['RAW', sexp[1]]
+
+	case 'new':
+	    return ['NEW', normalize(sexp[1]), normalizeArray(sexp.slice(2))]
 
 	}   
     }
@@ -304,6 +311,11 @@ Context.prototype = {
 	case 'GLOBAL':	    
 	    return node
 
+	case 'KEYWORD':
+	    return ['CALL', 
+		    ['GLOBAL', 'vegas', 'Keyword'], 
+		    [['CONST', node[1]]]]
+
 	case 'PROPERTY':
 	    return ['PROPERTY', this.toExpr(node[1]), this.toExpr(node[2])]
 
@@ -328,6 +340,11 @@ Context.prototype = {
 	    var callee = this.toExpr(node[1])
 	    var args   = this.toExprs(node[2])
 	    return ['CALL', callee, args]
+
+	case 'NEW':
+	    var callee = this.toExpr(node[1])
+	    var args   = this.toExprs(node[2])
+	    return ['NEW', callee, args]
 
 	case 'THIS':
 	case 'RESTARGS':
@@ -381,6 +398,10 @@ Context.prototype = {
 	case 'CONST':
 	case 'GLOBAL':
 	    this.pushPure(node, tracer)
+	    break
+
+	case 'KEYWORD':
+	    this.pushPure(this.toExpr(node), tracer)
 	    break
 
 	case 'LOCAL':
@@ -452,6 +473,7 @@ Context.prototype = {
 	    this.pushPure(this.toExpr(node), tracer)
 	    break
 
+	case 'NEW':
 	case 'CALL':
 	    this.pushExpr(this.toExpr(node), tracer)
 	    break

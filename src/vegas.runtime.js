@@ -93,6 +93,19 @@ var RT = {
 	for (var i=0; i<alen-1; i++) { arr[i]   = arguments[i] }	
 	for (var j=0; j<blen; j++)   { arr[i+j] = b[j] }
 	return arr
+    },
+
+    'vegas::concat' : function() {
+	var res = []
+	for (var i=0; i<arguments.length; i++) {
+	    var xs = arguments[i]
+	    if (xs) {
+		for (var j=0; j<xs.length; j++) {
+		    res.push(xs[j])
+		}
+	    }
+	}
+	return res
     }
 
 

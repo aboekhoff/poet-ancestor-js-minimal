@@ -94,11 +94,15 @@ function evaluateTopLevelFragment(sexp) {
     log('\n[COMPILE]\n')
     log(prnstr(jsast))
 
-    var warhead = Emitter.bake(jsast)
+    // show(jsast)
 
-    log('\n[EMIT]\n')
-    log(warhead.toString())
-    log('\n')
+    var emitter = new Emitter()
+    var src     = emitter.emitProgram(jsast)
+    var warhead = Function(emitter.globalSymbol, src)
+
+    log('\n[EMIT]')
+    log(src)
+    log('\n\n')
 
     return warhead(RT)
 }
