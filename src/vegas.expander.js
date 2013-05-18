@@ -11,6 +11,11 @@ function Expander(namespace, symbols, labels) {
     this.labels    = labels;
 } 
 
+Expander.prototype.createSanitizer = function() {
+    var tag = new Tag(this)
+    
+}
+
 Expander.prototype.extendSymbols = function() {
     return new Expander(this.namespace, this.symbols.extend(), this.labels)
 }
