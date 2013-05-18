@@ -54,6 +54,8 @@ Reader.notTerminal = function(c) {
     case ';':
     case '(':
     case ')':
+    case '[':
+    case ']':
     case '"':
     case "'":
     case '`':
@@ -159,7 +161,9 @@ Reader.prototype = {
 
 	switch (nextChar) {
 	case ')': this.syntaxError('unmatched closing paren');
+	case ']': this.syntaxError('unmatched closing brace');
 	case '(': return this.readList();
+	case '[': return this.readArray();
 	case '"': return this.readString();
 	case "'": return this.readQuote();
 	case ',': return this.readUnquote();
@@ -202,6 +206,32 @@ Reader.prototype = {
 
     },
 
+    readArray: function() {
+	var position = this.getPosition();		
+	var list     = [];
+	this.pop();
+
+	loop:for(;;) {			
+	    this.readWhitespace();
+	    var c = this.peek();
+	    switch(c) {
+
+	    case null: 
+		this.error('unclosed array-literal', position);
+		
+	    case ']': 
+		this.pop(); 
+		return this.makeList(
+		    [Symbol.coreSymbol('array')].concat(list),
+		    position
+		);
+
+	    default: 
+		list.push(this.readSexp()); continue loop;
+	    }
+	}
+    },
+
     readList: function() {
 	var position = this.getPosition();		
 	var list     = [];
@@ -211,9 +241,14 @@ Reader.prototype = {
 	    this.readWhitespace();
 	    var c = this.peek();
 	    switch(c) {
-	    case null : this.error('unclosed list', position);
-	    case ')'  : this.pop(); return this.makeList(list, position);
-	    default   : list.push(this.readSexp()); continue loop;
+	    case null: 
+		this.error('unclosed list', position);
+
+	    case ')': 
+		this.pop(); return this.makeList(list, position);
+
+	    default: 
+		list.push(this.readSexp()); continue loop;
 	    }
 	}
     },

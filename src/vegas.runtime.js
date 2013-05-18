@@ -171,6 +171,23 @@ var RT = {
 	    }
 	}
 	return res
+    },
+   
+    'vegas::apply' : function(f) {
+	var len  = arguments.length
+	var more = arguments[len-1]
+	var mlen = more.length
+	var args = new Array((len-2) + mlen)
+
+	for (var i=0; i<len-2; i++) {
+	    args[i] = arguments[i+1]
+	}
+
+	for (var j=0; j<mlen; j++) {
+	    args[i+j] = more[j]
+	}
+
+	return f.apply(null, args)
     }
 
 

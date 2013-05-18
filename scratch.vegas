@@ -1,13 +1,14 @@
-(require vegas)
+;(require vegas)
 
-;; can redefine with generic versions (much) later
+;; so what does a lisp look like when it's only datastructure
+;; is javascript arrays?
 
-(define* first (fn* (arr) (. arr 0)))
+(define* first  (fn* (arr) (. arr 0)))
 (define* second (fn* (arr) (. arr 1)))
-(define* rest  (fn* (arr) (.slice arr 1)))
-(define* len   (fn* (arr) (. arr "length")))
-(define* drop  (fn* (n arr) (.slice arr n)))
-(define* take  (fn* (n arr) (.slice arr 0 n)))
+(define* rest   (fn* (arr) (.slice arr 1)))
+(define* len    (fn* (arr) (. arr "length")))
+(define* drop   (fn* (n arr) (.slice arr n)))
+(define* take   (fn* (n arr) (.slice arr 0 n)))
 
 (define-macro* define 
   (fn* (sexp e1 e2)
@@ -24,6 +25,21 @@
 					    (vegas::block ,name ,@tail))))
 	     
 	     `(vegas::define* ,head ,(first tail))))))
+
+(define-macro* define-macro
+  (fn* (sexp calling-env defining-env)
+       (let ((name+args (first (rest sexp)))
+	     (name      (first name+args))
+	     (args      (rest name+args))
+	     (body      (drop 2 sexp)))
+	 `(vegas::define-macro* ,name
+	    (let ((transformer (fn* ,args ,@body)))
+	      (fn* (sexp calling-env defining-env)
+		   (let ((tag   (.createTag defining-env))
+			 (sexp1 (.sanitize tag sexp))
+			 (sexp2 (apply transformer sexp1))
+			 (sexp3 (.sanitize tag sexp2)))
+		     sexp3)))))))
 
 (define-macro* cond
   (fn* (sexp e1 e2)
@@ -91,8 +107,22 @@
 (prn (and 0 "" #t 42))
 
 (do/trace
- (drop 2 (array 1 2 3 4 5))
- (take 2 (array 1 2 3 4 5))
- (first  (array 1 2 3 4 5))
- (second (array 1 2 3 4 5)))
+ (set nums [1 2 3 4 5])
+ (drop 2 nums)
+ (take 2 nums)
+ (first nums)
+ (second nums))
 
+(cond 
+ (#f :wtf)
+ (#t (prn "yup #t is #t" 42)))
+
+(define-macro (do/trace2 :rest clauses)
+  (let ((trace1 
+	 (fn* (sexp) `(let ((res ,sexp))
+		     (prn ',sexp '=> res)
+		     res))))))
+
+(do/trace2
+ :it-works
+ (* 42 42))

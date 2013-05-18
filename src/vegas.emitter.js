@@ -176,12 +176,15 @@ Emitter.prototype = {
 	    this.emit(a)
 	    this.write(' !== false) ')
 	    this.emitBlock(b)
-	    this.write(' else ')
 
-	    if (c[0][0] == 'IF') {
-		this.emit(c[0])
-	    } else {
-		this.emitBlock(c)
+	    if (c[0]) {
+		this.write(' else ')
+		if (c[0][0] == 'IF') {
+		    this.emit(c[0])
+		} 
+		else {
+		    this.emitBlock(c)
+		}
 	    }
 	    break
 

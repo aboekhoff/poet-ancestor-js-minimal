@@ -98,18 +98,28 @@ Tag.prototype.toString = function() {
     return '%' + this.id
 }
 
-Tag.prototype.sanitize = function(sexp) {
-    if (sexp instanceof Symbol) {
-	return sexp.applyTag(this)
-    } 
+Tag.prototype.sanitize = function(sexp) {    
 
-    else if (sexp instanceof Array) {
-	return sexp.map(this.sanitize.bind(this))
+    var tag = this
+
+    function _sanitize(x) {
+	
+	if (sexp instanceof Symbol) {
+	    return sexp.applyTag(tag)
+	}
+
+	if (sexp instanceof Array) {
+	    return sexp.map(_sanitize)
+	}
+
+	else {
+	    return sexp
+	}
+
     }
 
-    else {
-	return sexp
-    }
+    return _sanitize(x)
+
 }
 
 /* 
@@ -216,6 +226,10 @@ Env.toKey = function(obj) {
 	return obj.constructor.name + "#" + obj
     }
 
+}
+
+Env.prototype.createTag = function() {
+    return new Tag(this)
 }
 
 Env.prototype.extend = function() {

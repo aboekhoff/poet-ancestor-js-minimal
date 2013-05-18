@@ -100,18 +100,28 @@ Tag.prototype.toString = function() {
     return '%' + this.id
 }
 
-Tag.prototype.sanitize = function(sexp) {
-    if (sexp instanceof Symbol) {
-	return sexp.applyTag(this)
-    } 
+Tag.prototype.sanitize = function(sexp) {    
 
-    else if (sexp instanceof Array) {
-	return sexp.map(this.sanitize.bind(this))
+    var tag = this
+
+    function _sanitize(x) {
+	
+	if (sexp instanceof Symbol) {
+	    return sexp.applyTag(tag)
+	}
+
+	if (sexp instanceof Array) {
+	    return sexp.map(_sanitize)
+	}
+
+	else {
+	    return sexp
+	}
+
     }
 
-    else {
-	return sexp
-    }
+    return _sanitize(x)
+
 }
 
 /* 
@@ -218,6 +228,10 @@ Env.toKey = function(obj) {
 	return obj.constructor.name + "#" + obj
     }
 
+}
+
+Env.prototype.createTag = function() {
+    return new Tag(this)
 }
 
 Env.prototype.extend = function() {
@@ -853,6 +867,8 @@ Reader.notTerminal = function(c) {
     case ';':
     case '(':
     case ')':
+    case '[':
+    case ']':
     case '"':
     case "'":
     case '`':
@@ -958,7 +974,9 @@ Reader.prototype = {
 
 	switch (nextChar) {
 	case ')': this.syntaxError('unmatched closing paren');
+	case ']': this.syntaxError('unmatched closing brace');
 	case '(': return this.readList();
+	case '[': return this.readArray();
 	case '"': return this.readString();
 	case "'": return this.readQuote();
 	case ',': return this.readUnquote();
@@ -1001,6 +1019,32 @@ Reader.prototype = {
 
     },
 
+    readArray: function() {
+	var position = this.getPosition();		
+	var list     = [];
+	this.pop();
+
+	loop:for(;;) {			
+	    this.readWhitespace();
+	    var c = this.peek();
+	    switch(c) {
+
+	    case null: 
+		this.error('unclosed array-literal', position);
+		
+	    case ']': 
+		this.pop(); 
+		return this.makeList(
+		    [Symbol.coreSymbol('array')].concat(list),
+		    position
+		);
+
+	    default: 
+		list.push(this.readSexp()); continue loop;
+	    }
+	}
+    },
+
     readList: function() {
 	var position = this.getPosition();		
 	var list     = [];
@@ -1010,9 +1054,14 @@ Reader.prototype = {
 	    this.readWhitespace();
 	    var c = this.peek();
 	    switch(c) {
-	    case null : this.error('unclosed list', position);
-	    case ')'  : this.pop(); return this.makeList(list, position);
-	    default   : list.push(this.readSexp()); continue loop;
+	    case null: 
+		this.error('unclosed list', position);
+
+	    case ')': 
+		this.pop(); return this.makeList(list, position);
+
+	    default: 
+		list.push(this.readSexp()); continue loop;
 	    }
 	}
     },
@@ -1794,12 +1843,15 @@ Emitter.prototype = {
 	    this.emit(a)
 	    this.write(' !== false) ')
 	    this.emitBlock(b)
-	    this.write(' else ')
 
-	    if (c[0][0] == 'IF') {
-		this.emit(c[0])
-	    } else {
-		this.emitBlock(c)
+	    if (c[0]) {
+		this.write(' else ')
+		if (c[0][0] == 'IF') {
+		    this.emit(c[0])
+		} 
+		else {
+		    this.emitBlock(c)
+		}
 	    }
 	    break
 
@@ -2109,6 +2161,23 @@ var RT = {
 	    }
 	}
 	return res
+    },
+   
+    'vegas::apply' : function(f) {
+	var len  = arguments.length
+	var more = arguments[len-1]
+	var mlen = more.length
+	var args = new Array((len-2) + mlen)
+
+	for (var i=0; i<len-2; i++) {
+	    args[i] = arguments[i+1]
+	}
+
+	for (var j=0; j<mlen; j++) {
+	    args[i+j] = more[j]
+	}
+
+	return f.apply(null, args)
     }
 
 
@@ -2120,7 +2189,15 @@ var RT = {
 
 // adhoc stuff to be removed
 
-var out = process.stdout
+var out
+
+!(function() {
+    if (typeof process != 'undefined') {
+	out = process.stdout
+    } else {
+	out = { write: function(x) { console.log(x) } }
+    }
+})();
 
 function represent(obj, port, escape) {
     if (obj == null) { port.write("#nil") }
@@ -2255,8 +2332,8 @@ exports.load = function(file) {
     var buf = []
 
     var rdr = Reader.create(txt, file)
-    var exp = new Expander('test',
-			   Env.create('test'), 
+    var exp = new Expander('vegas',
+			   Env.find('vegas'), 
 			   Env.createEmpty())
     var top = exp.createTopLevel()
 
@@ -2284,9 +2361,16 @@ exports.load = function(file) {
 		break 
 
 	    case 'DEFINE_MACRO':
-		var transformer = evaluateMacroDefinition(expr[2])
-		var symbol      = expr[1]				
-		exp.symbols.put(symbol, transformer)
+		!(function() {		    
+		    var transformer = evaluateMacroDefinition(expr[2])
+		    var symbol      = expr[1]
+		    var definingEnv = exp
+		    var macro       = function(sexp, callingEnv) {
+			return transformer(sexp, callingEnv, definingEnv)
+		    }
+		    exp.symbols.put(symbol, macro)
+		})();
+
 		break				
 	    }
 
@@ -2339,7 +2423,6 @@ var specialFormNames = [
 
 RT['vegas::Symbol']  = Symbol
 RT['vegas::Keyword'] = Keyword
-RT['vegas::Tag']     = Tag
 RT['vegas::prn']     = prn
 RT['vegas::runtime'] = RT
 
@@ -2382,6 +2465,7 @@ expand('(block :the-block ())')
 var fs = require('fs')
 
 log = function(txt) {
+    console.log(txt)
     fs.appendFile(log.file, txt)
 }
 
