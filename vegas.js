@@ -1062,6 +1062,11 @@ Reader.prototype = {
 	    return Keyword(string.substring(1))
 	}
 
+	else if (/[^:]+::[^:]+/.test(string)) {
+	    var segments = string.split(/::/)
+	    return new Symbol(segments[0], segments[1])
+	}
+
 	else {
 	    return new Symbol(null, string)
 	}
@@ -1779,13 +1784,15 @@ Emitter.prototype = {
 	var a   = node[1]
 	var b   = node[2]
 	var c   = node[3]
-	
+
 	switch(tag) {
 
-	case 'IF':
-	    this.write('if(')
+	case 'IF':	    
+	    this.write('if (')
 	    this.emit(a)
-	    this.write(') ')
+	    this.write(' != null && ')
+	    this.emit(a)
+	    this.write(' !== false) ')
 	    this.emitBlock(b)
 	    this.write(' else ')
 
@@ -1795,7 +1802,6 @@ Emitter.prototype = {
 		this.emitBlock(c)
 	    }
 	    break
-
 
 	case 'DECLARE':
 	    this.write('var ')

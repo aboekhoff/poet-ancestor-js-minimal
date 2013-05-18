@@ -3,14 +3,14 @@
 ;; can redefine with generic versions (much) later
 
 (define* first (fn* (arr) (. arr 0)))
+(define* second (fn* (arr) (. arr 1)))
 (define* rest  (fn* (arr) (.slice arr 1)))
-(define* core-symbol (fn* (name) (.coreSymbol Symbol name)))
-
-;; redefine later
-
+(define* len   (fn* (arr) (. arr "length")))
+(define* drop  (fn* (n arr) (.slice arr n)))
+(define* take  (fn* (n arr) (.slice arr 0 n)))
 
 (define-macro* define 
-  (fn* (sexp env)
+  (fn* (sexp e1 e2)
        (let ((head (first (rest sexp)))
 	     (tail (rest (rest sexp))))
 
@@ -19,15 +19,54 @@
 	     (let ((name (first head))
 		   (args (rest head)))
 
-	       `(,(core-symbol "define*")
-		 ,name
-		 (,(core-symbol "fn*")
-		  ,args
-		  (,(core-symbol "block")
-		   ,name
-		   ,@tail))))
+	       `(vegas::define* ,name
+				(vegas::fn* ,args
+					    (vegas::block ,name ,@tail))))
 	     
-	     `(,core-symbol "define*" ,head ,(first tail))))))
+	     `(vegas::define* ,head ,(first tail))))))
+
+(define-macro* cond
+  (fn* (sexp e1 e2)
+       (if (= (len sexp) 1)
+	   #nil
+	   (let ((clause (second sexp))
+		 (more   (drop 2 sexp)))
+	     `(if ,(first clause)
+		  (do ,@(rest clause))
+		  (cond ,@more))))))
+
+(define-macro* or
+  (fn* (sexp e1 e2)
+       (if (= (len sexp) 1)
+	   #nil
+	   (if (= (len sexp) 2)
+	       (second sexp)
+	       (let ((x  (second sexp))
+		     (xs (drop 2 sexp)))
+		 `(let ((tmp ,x))
+		    (if tmp tmp (or ,@xs))))))))
+
+(define-macro* and
+  (fn* (sexp e1 e2)
+       (if (= (len sexp) 1)
+	   #nil
+	   (if (= (len sexp) 2)
+	       (second sexp)
+	       (let ((x  (second sexp))
+		     (xs (drop 2 sexp)))
+		 `(let ((tmp ,x))
+		    (if tmp (and ,@xs) tmp)))))))
+
+(define-macro* do/trace
+  (fn* (sexp e1 e2)
+       (let ((trace1 
+	      (fn* (sexp)
+		  `(let ((result ,sexp))
+		     (do (prn ',sexp '=> result)
+			 result))))
+	     (clauses 
+	      (.map (rest sexp) trace1)))
+	 `(do ,@clauses))))
 
 (define (square x) (* x x))
 (prn (square 42))
@@ -43,3 +82,17 @@
        (return-from #nil))))
 
 (prn `(:a `(:b ,:c ,@xs)))
+
+(define (match pat obj)
+  (let ((fail (fn* () (return-from match #nil))))
+    (match* p x)))
+
+(prn (or #nil #f 0 ""))
+(prn (and 0 "" #t 42))
+
+(with-trace
+ (drop 2 (array 1 2 3 4 5))
+ (take 2 (array 1 2 3 4 5))
+ (first  (array 1 2 3 4 5))
+ (second (array 1 2 3 4 5)))
+

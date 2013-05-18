@@ -263,6 +263,11 @@ Reader.prototype = {
 	    return Keyword(string.substring(1))
 	}
 
+	else if (/[^:]+::[^:]+/.test(string)) {
+	    var segments = string.split(/::/)
+	    return new Symbol(segments[0], segments[1])
+	}
+
 	else {
 	    return new Symbol(null, string)
 	}

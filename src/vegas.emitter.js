@@ -166,13 +166,15 @@ Emitter.prototype = {
 	var a   = node[1]
 	var b   = node[2]
 	var c   = node[3]
-	
+
 	switch(tag) {
 
-	case 'IF':
-	    this.write('if(')
+	case 'IF':	    
+	    this.write('if (')
 	    this.emit(a)
-	    this.write(') ')
+	    this.write(' != null && ')
+	    this.emit(a)
+	    this.write(' !== false) ')
 	    this.emitBlock(b)
 	    this.write(' else ')
 
@@ -182,7 +184,6 @@ Emitter.prototype = {
 		this.emitBlock(c)
 	    }
 	    break
-
 
 	case 'DECLARE':
 	    this.write('var ')

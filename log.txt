@@ -32,6 +32,25 @@ RT["test::first"] = function(arg_1_0) {
 };
 
 [READ SEXP]
+(define* second (fn* (arr) (. arr 1)))
+
+[EXPAND SEXP]
+("EXPRESSION" (vegas::set test::second (vegas::fn* (arr) (vegas::. arr 1))))
+
+[NORMALIZE]
+("SET" ("GLOBAL" "test" "second") ("FUN" (("LOCAL" "arr")) ("PROPERTY" ("LOCAL" "arr") ("CONST" 1))))
+
+[COMPILE]
+(("SET" ("GLOBAL" "test" "second") ("FUN" (("ARG" 1 0)) (("DECLARE" 1 1) ("SET" ("LOCAL" 1 0) ("PROPERTY" ("ARG" 1 0) ("CONST" 1))) ("RETURN" ("LOCAL" 1 0))))))
+
+[EMIT]
+RT["test::second"] = function(arg_1_0) {
+    var local_1_0;
+    local_1_0 = arg_1_0[1];
+    return local_1_0;
+};
+
+[READ SEXP]
 (define* rest (fn* (arr) (.slice arr 1)))
 
 [EXPAND SEXP]
@@ -51,52 +70,219 @@ RT["test::rest"] = function(arg_1_0) {
 };
 
 [READ SEXP]
-(define* core-symbol (fn* (name) (.coreSymbol Symbol name)))
+(define* len (fn* (arr) (. arr "length")))
 
 [EXPAND SEXP]
-("EXPRESSION" (vegas::set test::core-symbol (vegas::fn* (name) ((vegas::. vegas::Symbol "coreSymbol") name))))
+("EXPRESSION" (vegas::set test::len (vegas::fn* (arr) (vegas::. arr "length"))))
 
 [NORMALIZE]
-("SET" ("GLOBAL" "test" "core-symbol") ("FUN" (("LOCAL" "name")) ("CALL" ("PROPERTY" ("GLOBAL" "vegas" "Symbol") ("CONST" "coreSymbol")) (("LOCAL" "name")))))
+("SET" ("GLOBAL" "test" "len") ("FUN" (("LOCAL" "arr")) ("PROPERTY" ("LOCAL" "arr") ("CONST" "length"))))
 
 [COMPILE]
-(("SET" ("GLOBAL" "test" "core-symbol") ("FUN" (("ARG" 1 0)) (("DECLARE" 1 1) ("SET" ("LOCAL" 1 0) ("CALL" ("PROPERTY" ("GLOBAL" "vegas" "Symbol") ("CONST" "coreSymbol")) (("ARG" 1 0)))) ("RETURN" ("LOCAL" 1 0))))))
+(("SET" ("GLOBAL" "test" "len") ("FUN" (("ARG" 1 0)) (("DECLARE" 1 1) ("SET" ("LOCAL" 1 0) ("PROPERTY" ("ARG" 1 0) ("CONST" "length"))) ("RETURN" ("LOCAL" 1 0))))))
 
 [EMIT]
-RT["test::core-symbol"] = function(arg_1_0) {
+RT["test::len"] = function(arg_1_0) {
     var local_1_0;
-    local_1_0 = RT["vegas::Symbol"]["coreSymbol"](arg_1_0);
+    local_1_0 = arg_1_0["length"];
     return local_1_0;
 };
 
 [READ SEXP]
-(define-macro* define (fn* (sexp env) (let ((head (first (rest sexp))) (tail (rest (rest sexp)))) (if (array? head) (let ((name (first head)) (args (rest head))) (vegas::quasiquote ((vegas::unquote (core-symbol "define*")) (vegas::unquote name) ((vegas::unquote (core-symbol "fn*")) (vegas::unquote args) ((vegas::unquote (core-symbol "block")) (vegas::unquote name) (vegas::unquote-splicing tail)))))) (vegas::quasiquote ((vegas::unquote core-symbol) "define*" (vegas::unquote head) (vegas::unquote (first tail))))))))
+(define* drop (fn* (n arr) (.slice arr n)))
 
 [EXPAND SEXP]
-("DEFINE_MACRO" define (vegas::fn* (sexp env) (vegas::let ((head (test::first (test::rest sexp))) (tail (test::rest (test::rest sexp)))) (vegas::if (vegas::array? head) (vegas::let ((name (test::first head)) (args (test::rest head))) (vegas::concat (vegas::array (test::core-symbol "define*")) (vegas::array name) (vegas::array (vegas::concat (vegas::array (test::core-symbol "fn*")) (vegas::array args) (vegas::array (vegas::concat (vegas::array (test::core-symbol "block")) (vegas::array name) tail)))))) (vegas::concat (vegas::array test::core-symbol) (vegas::array "define*") (vegas::array head) (vegas::array (test::first tail)))))))
+("EXPRESSION" (vegas::set test::drop (vegas::fn* (n arr) ((vegas::. arr "slice") n))))
 
 [NORMALIZE]
-("FUN" (("LOCAL" "sexp") ("LOCAL" "env")) ("LET" ((("LOCAL" "head") ("CALL" ("GLOBAL" "test" "first") (("CALL" ("GLOBAL" "test" "rest") (("LOCAL" "sexp")))))) (("LOCAL" "tail") ("CALL" ("GLOBAL" "test" "rest") (("CALL" ("GLOBAL" "test" "rest") (("LOCAL" "sexp"))))))) ("IF" ("CALL" ("GLOBAL" "vegas" "array?") (("LOCAL" "head"))) ("LET" ((("LOCAL" "name") ("CALL" ("GLOBAL" "test" "first") (("LOCAL" "head")))) (("LOCAL" "args") ("CALL" ("GLOBAL" "test" "rest") (("LOCAL" "head"))))) ("CALL" ("GLOBAL" "vegas" "concat") (("CALL" ("GLOBAL" "vegas" "array") (("CALL" ("GLOBAL" "test" "core-symbol") (("CONST" "define*"))))) ("CALL" ("GLOBAL" "vegas" "array") (("LOCAL" "name"))) ("CALL" ("GLOBAL" "vegas" "array") (("CALL" ("GLOBAL" "vegas" "concat") (("CALL" ("GLOBAL" "vegas" "array") (("CALL" ("GLOBAL" "test" "core-symbol") (("CONST" "fn*"))))) ("CALL" ("GLOBAL" "vegas" "array") (("LOCAL" "args"))) ("CALL" ("GLOBAL" "vegas" "array") (("CALL" ("GLOBAL" "vegas" "concat") (("CALL" ("GLOBAL" "vegas" "array") (("CALL" ("GLOBAL" "test" "core-symbol") (("CONST" "block"))))) ("CALL" ("GLOBAL" "vegas" "array") (("LOCAL" "name"))) ("LOCAL" "tail")))))))))))) ("CALL" ("GLOBAL" "vegas" "concat") (("CALL" ("GLOBAL" "vegas" "array") (("GLOBAL" "test" "core-symbol"))) ("CALL" ("GLOBAL" "vegas" "array") (("CONST" "define*"))) ("CALL" ("GLOBAL" "vegas" "array") (("LOCAL" "head"))) ("CALL" ("GLOBAL" "vegas" "array") (("CALL" ("GLOBAL" "test" "first") (("LOCAL" "tail"))))))))))
+("SET" ("GLOBAL" "test" "drop") ("FUN" (("LOCAL" "n") ("LOCAL" "arr")) ("CALL" ("PROPERTY" ("LOCAL" "arr") ("CONST" "slice")) (("LOCAL" "n")))))
+
+[COMPILE]
+(("SET" ("GLOBAL" "test" "drop") ("FUN" (("ARG" 1 0) ("ARG" 1 1)) (("DECLARE" 1 1) ("SET" ("LOCAL" 1 0) ("CALL" ("PROPERTY" ("ARG" 1 1) ("CONST" "slice")) (("ARG" 1 0)))) ("RETURN" ("LOCAL" 1 0))))))
+
+[EMIT]
+RT["test::drop"] = function(arg_1_0, arg_1_1) {
+    var local_1_0;
+    local_1_0 = arg_1_1["slice"](arg_1_0);
+    return local_1_0;
+};
+
+[READ SEXP]
+(define* take (fn* (n arr) (.slice arr 0 n)))
+
+[EXPAND SEXP]
+("EXPRESSION" (vegas::set test::take (vegas::fn* (n arr) ((vegas::. arr "slice") 0 n))))
+
+[NORMALIZE]
+("SET" ("GLOBAL" "test" "take") ("FUN" (("LOCAL" "n") ("LOCAL" "arr")) ("CALL" ("PROPERTY" ("LOCAL" "arr") ("CONST" "slice")) (("CONST" 0) ("LOCAL" "n")))))
+
+[COMPILE]
+(("SET" ("GLOBAL" "test" "take") ("FUN" (("ARG" 1 0) ("ARG" 1 1)) (("DECLARE" 1 1) ("SET" ("LOCAL" 1 0) ("CALL" ("PROPERTY" ("ARG" 1 1) ("CONST" "slice")) (("CONST" 0) ("ARG" 1 0)))) ("RETURN" ("LOCAL" 1 0))))))
+
+[EMIT]
+RT["test::take"] = function(arg_1_0, arg_1_1) {
+    var local_1_0;
+    local_1_0 = arg_1_1["slice"](0, arg_1_0);
+    return local_1_0;
+};
+
+[READ SEXP]
+(define-macro* define (fn* (sexp e1 e2) (let ((head (first (rest sexp))) (tail (rest (rest sexp)))) (if (array? head) (let ((name (first head)) (args (rest head))) (vegas::quasiquote (vegas::define* (vegas::unquote name) (vegas::fn* (vegas::unquote args) (vegas::block (vegas::unquote name) (vegas::unquote-splicing tail)))))) (vegas::quasiquote (vegas::define* (vegas::unquote head) (vegas::unquote (first tail))))))))
+
+[EXPAND SEXP]
+("DEFINE_MACRO" define (vegas::fn* (sexp e1 e2) (vegas::let ((head (test::first (test::rest sexp))) (tail (test::rest (test::rest sexp)))) (vegas::if (vegas::array? head) (vegas::let ((name (test::first head)) (args (test::rest head))) (vegas::concat (vegas::array (vegas::Symbol "vegas" "define*")) (vegas::array name) (vegas::array (vegas::concat (vegas::array (vegas::Symbol "vegas" "fn*")) (vegas::array args) (vegas::array (vegas::concat (vegas::array (vegas::Symbol "vegas" "block")) (vegas::array name) tail)))))) (vegas::concat (vegas::array (vegas::Symbol "vegas" "define*")) (vegas::array head) (vegas::array (test::first tail)))))))
+
+[NORMALIZE]
+("FUN" (("LOCAL" "sexp") ("LOCAL" "e1") ("LOCAL" "e2")) ("LET" ((("LOCAL" "head") ("CALL" ("GLOBAL" "test" "first") (("CALL" ("GLOBAL" "test" "rest") (("LOCAL" "sexp")))))) (("LOCAL" "tail") ("CALL" ("GLOBAL" "test" "rest") (("CALL" ("GLOBAL" "test" "rest") (("LOCAL" "sexp"))))))) ("IF" ("CALL" ("GLOBAL" "vegas" "array?") (("LOCAL" "head"))) ("LET" ((("LOCAL" "name") ("CALL" ("GLOBAL" "test" "first") (("LOCAL" "head")))) (("LOCAL" "args") ("CALL" ("GLOBAL" "test" "rest") (("LOCAL" "head"))))) ("CALL" ("GLOBAL" "vegas" "concat") (("CALL" ("GLOBAL" "vegas" "array") (("CALL" ("GLOBAL" "vegas" "Symbol") (("CONST" "vegas") ("CONST" "define*"))))) ("CALL" ("GLOBAL" "vegas" "array") (("LOCAL" "name"))) ("CALL" ("GLOBAL" "vegas" "array") (("CALL" ("GLOBAL" "vegas" "concat") (("CALL" ("GLOBAL" "vegas" "array") (("CALL" ("GLOBAL" "vegas" "Symbol") (("CONST" "vegas") ("CONST" "fn*"))))) ("CALL" ("GLOBAL" "vegas" "array") (("LOCAL" "args"))) ("CALL" ("GLOBAL" "vegas" "array") (("CALL" ("GLOBAL" "vegas" "concat") (("CALL" ("GLOBAL" "vegas" "array") (("CALL" ("GLOBAL" "vegas" "Symbol") (("CONST" "vegas") ("CONST" "block"))))) ("CALL" ("GLOBAL" "vegas" "array") (("LOCAL" "name"))) ("LOCAL" "tail")))))))))))) ("CALL" ("GLOBAL" "vegas" "concat") (("CALL" ("GLOBAL" "vegas" "array") (("CALL" ("GLOBAL" "vegas" "Symbol") (("CONST" "vegas") ("CONST" "define*"))))) ("CALL" ("GLOBAL" "vegas" "array") (("LOCAL" "head"))) ("CALL" ("GLOBAL" "vegas" "array") (("CALL" ("GLOBAL" "test" "first") (("LOCAL" "tail"))))))))))
 
 [COMPILE_MACRO]
-(("DECLARE" 0 1) ("SET" ("LOCAL" 0 0) ("FUN" (("ARG" 1 0) ("ARG" 1 1)) (("DECLARE" 1 6) ("SET" ("LOCAL" 1 1) ("CALL" ("GLOBAL" "test" "first") (("CALL" ("GLOBAL" "test" "rest") (("ARG" 1 0)))))) ("SET" ("LOCAL" 1 2) ("CALL" ("GLOBAL" "test" "rest") (("CALL" ("GLOBAL" "test" "rest") (("ARG" 1 0)))))) ("SET" ("LOCAL" 1 3) ("CALL" ("GLOBAL" "vegas" "array?") (("LOCAL" 1 1)))) ("IF" ("LOCAL" 1 3) (("SET" ("LOCAL" 1 4) ("CALL" ("GLOBAL" "test" "first") (("LOCAL" 1 1)))) ("SET" ("LOCAL" 1 5) ("CALL" ("GLOBAL" "test" "rest") (("LOCAL" 1 1)))) ("SET" ("LOCAL" 1 0) ("CALL" ("GLOBAL" "vegas" "concat") (("CALL" ("GLOBAL" "vegas" "array") (("CALL" ("GLOBAL" "test" "core-symbol") (("CONST" "define*"))))) ("CALL" ("GLOBAL" "vegas" "array") (("LOCAL" 1 4))) ("CALL" ("GLOBAL" "vegas" "array") (("CALL" ("GLOBAL" "vegas" "concat") (("CALL" ("GLOBAL" "vegas" "array") (("CALL" ("GLOBAL" "test" "core-symbol") (("CONST" "fn*"))))) ("CALL" ("GLOBAL" "vegas" "array") (("LOCAL" 1 5))) ("CALL" ("GLOBAL" "vegas" "array") (("CALL" ("GLOBAL" "vegas" "concat") (("CALL" ("GLOBAL" "vegas" "array") (("CALL" ("GLOBAL" "test" "core-symbol") (("CONST" "block"))))) ("CALL" ("GLOBAL" "vegas" "array") (("LOCAL" 1 4))) ("LOCAL" 1 2))))))))))))) (("SET" ("LOCAL" 1 0) ("CALL" ("GLOBAL" "vegas" "concat") (("CALL" ("GLOBAL" "vegas" "array") (("GLOBAL" "test" "core-symbol"))) ("CALL" ("GLOBAL" "vegas" "array") (("CONST" "define*"))) ("CALL" ("GLOBAL" "vegas" "array") (("LOCAL" 1 1))) ("CALL" ("GLOBAL" "vegas" "array") (("CALL" ("GLOBAL" "test" "first") (("LOCAL" 1 2)))))))))) ("RETURN" ("LOCAL" 1 0))))) ("RETURN" ("LOCAL" 0 0)))
+(("DECLARE" 0 1) ("SET" ("LOCAL" 0 0) ("FUN" (("ARG" 1 0) ("ARG" 1 1) ("ARG" 1 2)) (("DECLARE" 1 6) ("SET" ("LOCAL" 1 1) ("CALL" ("GLOBAL" "test" "first") (("CALL" ("GLOBAL" "test" "rest") (("ARG" 1 0)))))) ("SET" ("LOCAL" 1 2) ("CALL" ("GLOBAL" "test" "rest") (("CALL" ("GLOBAL" "test" "rest") (("ARG" 1 0)))))) ("SET" ("LOCAL" 1 3) ("CALL" ("GLOBAL" "vegas" "array?") (("LOCAL" 1 1)))) ("IF" ("LOCAL" 1 3) (("SET" ("LOCAL" 1 4) ("CALL" ("GLOBAL" "test" "first") (("LOCAL" 1 1)))) ("SET" ("LOCAL" 1 5) ("CALL" ("GLOBAL" "test" "rest") (("LOCAL" 1 1)))) ("SET" ("LOCAL" 1 0) ("CALL" ("GLOBAL" "vegas" "concat") (("CALL" ("GLOBAL" "vegas" "array") (("CALL" ("GLOBAL" "vegas" "Symbol") (("CONST" "vegas") ("CONST" "define*"))))) ("CALL" ("GLOBAL" "vegas" "array") (("LOCAL" 1 4))) ("CALL" ("GLOBAL" "vegas" "array") (("CALL" ("GLOBAL" "vegas" "concat") (("CALL" ("GLOBAL" "vegas" "array") (("CALL" ("GLOBAL" "vegas" "Symbol") (("CONST" "vegas") ("CONST" "fn*"))))) ("CALL" ("GLOBAL" "vegas" "array") (("LOCAL" 1 5))) ("CALL" ("GLOBAL" "vegas" "array") (("CALL" ("GLOBAL" "vegas" "concat") (("CALL" ("GLOBAL" "vegas" "array") (("CALL" ("GLOBAL" "vegas" "Symbol") (("CONST" "vegas") ("CONST" "block"))))) ("CALL" ("GLOBAL" "vegas" "array") (("LOCAL" 1 4))) ("LOCAL" 1 2))))))))))))) (("SET" ("LOCAL" 1 0) ("CALL" ("GLOBAL" "vegas" "concat") (("CALL" ("GLOBAL" "vegas" "array") (("CALL" ("GLOBAL" "vegas" "Symbol") (("CONST" "vegas") ("CONST" "define*"))))) ("CALL" ("GLOBAL" "vegas" "array") (("LOCAL" 1 1))) ("CALL" ("GLOBAL" "vegas" "array") (("CALL" ("GLOBAL" "test" "first") (("LOCAL" 1 2)))))))))) ("RETURN" ("LOCAL" 1 0))))) ("RETURN" ("LOCAL" 0 0)))
 
 [EMIT_MACRO]
 function anonymous(RT) {
 
 var local_0_0;
-local_0_0 = function(arg_1_0, arg_1_1) {
+local_0_0 = function(arg_1_0, arg_1_1, arg_1_2) {
     var local_1_0, local_1_1, local_1_2, local_1_3, local_1_4, local_1_5;
     local_1_1 = RT["test::first"](RT["test::rest"](arg_1_0));
     local_1_2 = RT["test::rest"](RT["test::rest"](arg_1_0));
     local_1_3 = RT["vegas::array?"](local_1_1);
-    if(local_1_3) {
+    if (local_1_3 != null && local_1_3 !== false) {
         local_1_4 = RT["test::first"](local_1_1);
         local_1_5 = RT["test::rest"](local_1_1);
-        local_1_0 = RT["vegas::concat"](RT["vegas::array"](RT["test::core-symbol"]("define*")), RT["vegas::array"](local_1_4), RT["vegas::array"](RT["vegas::concat"](RT["vegas::array"](RT["test::core-symbol"]("fn*")), RT["vegas::array"](local_1_5), RT["vegas::array"](RT["vegas::concat"](RT["vegas::array"](RT["test::core-symbol"]("block")), RT["vegas::array"](local_1_4), local_1_2)))));
+        local_1_0 = RT["vegas::concat"](RT["vegas::array"](RT["vegas::Symbol"]("vegas", "define*")), RT["vegas::array"](local_1_4), RT["vegas::array"](RT["vegas::concat"](RT["vegas::array"](RT["vegas::Symbol"]("vegas", "fn*")), RT["vegas::array"](local_1_5), RT["vegas::array"](RT["vegas::concat"](RT["vegas::array"](RT["vegas::Symbol"]("vegas", "block")), RT["vegas::array"](local_1_4), local_1_2)))));
     } else {
-        local_1_0 = RT["vegas::concat"](RT["vegas::array"](RT["test::core-symbol"]), RT["vegas::array"]("define*"), RT["vegas::array"](local_1_1), RT["vegas::array"](RT["test::first"](local_1_2)));
+        local_1_0 = RT["vegas::concat"](RT["vegas::array"](RT["vegas::Symbol"]("vegas", "define*")), RT["vegas::array"](local_1_1), RT["vegas::array"](RT["test::first"](local_1_2)));
     };
+    return local_1_0;
+};
+return local_0_0;
+}
+[READ SEXP]
+(define-macro* cond (fn* (sexp e1 e2) (if (= (len sexp) 1) #nil (let ((clause (second sexp)) (more (drop 2 sexp))) (vegas::quasiquote (if (vegas::unquote (first clause)) (do (vegas::unquote-splicing (rest clause))) (cond (vegas::unquote-splicing more))))))))
+
+[EXPAND SEXP]
+("DEFINE_MACRO" cond (vegas::fn* (sexp e1 e2) (vegas::if (vegas::= (test::len sexp) 1) #nil (vegas::let ((clause (test::second sexp)) (more (test::drop 2 sexp))) (vegas::concat (vegas::array (vegas::Symbol #nil "if")) (vegas::array (test::first clause)) (vegas::array (vegas::concat (vegas::array (vegas::Symbol #nil "do")) (test::rest clause))) (vegas::array (vegas::concat (vegas::array (vegas::Symbol #nil "cond")) more)))))))
+
+[NORMALIZE]
+("FUN" (("LOCAL" "sexp") ("LOCAL" "e1") ("LOCAL" "e2")) ("IF" ("CALL" ("GLOBAL" "vegas" "=") (("CALL" ("GLOBAL" "test" "len") (("LOCAL" "sexp"))) ("CONST" 1))) ("CONST" #nil) ("LET" ((("LOCAL" "clause") ("CALL" ("GLOBAL" "test" "second") (("LOCAL" "sexp")))) (("LOCAL" "more") ("CALL" ("GLOBAL" "test" "drop") (("CONST" 2) ("LOCAL" "sexp"))))) ("CALL" ("GLOBAL" "vegas" "concat") (("CALL" ("GLOBAL" "vegas" "array") (("CALL" ("GLOBAL" "vegas" "Symbol") (("CONST" #nil) ("CONST" "if"))))) ("CALL" ("GLOBAL" "vegas" "array") (("CALL" ("GLOBAL" "test" "first") (("LOCAL" "clause"))))) ("CALL" ("GLOBAL" "vegas" "array") (("CALL" ("GLOBAL" "vegas" "concat") (("CALL" ("GLOBAL" "vegas" "array") (("CALL" ("GLOBAL" "vegas" "Symbol") (("CONST" #nil) ("CONST" "do"))))) ("CALL" ("GLOBAL" "test" "rest") (("LOCAL" "clause"))))))) ("CALL" ("GLOBAL" "vegas" "array") (("CALL" ("GLOBAL" "vegas" "concat") (("CALL" ("GLOBAL" "vegas" "array") (("CALL" ("GLOBAL" "vegas" "Symbol") (("CONST" #nil) ("CONST" "cond"))))) ("LOCAL" "more"))))))))))
+
+[COMPILE_MACRO]
+(("DECLARE" 0 1) ("SET" ("LOCAL" 0 0) ("FUN" (("ARG" 1 0) ("ARG" 1 1) ("ARG" 1 2)) (("DECLARE" 1 4) ("SET" ("LOCAL" 1 1) ("CALL" ("GLOBAL" "vegas" "=") (("CALL" ("GLOBAL" "test" "len") (("ARG" 1 0))) ("CONST" 1)))) ("IF" ("LOCAL" 1 1) (("SET" ("LOCAL" 1 0) ("CONST" #nil))) (("SET" ("LOCAL" 1 2) ("CALL" ("GLOBAL" "test" "second") (("ARG" 1 0)))) ("SET" ("LOCAL" 1 3) ("CALL" ("GLOBAL" "test" "drop") (("CONST" 2) ("ARG" 1 0)))) ("SET" ("LOCAL" 1 0) ("CALL" ("GLOBAL" "vegas" "concat") (("CALL" ("GLOBAL" "vegas" "array") (("CALL" ("GLOBAL" "vegas" "Symbol") (("CONST" #nil) ("CONST" "if"))))) ("CALL" ("GLOBAL" "vegas" "array") (("CALL" ("GLOBAL" "test" "first") (("LOCAL" 1 2))))) ("CALL" ("GLOBAL" "vegas" "array") (("CALL" ("GLOBAL" "vegas" "concat") (("CALL" ("GLOBAL" "vegas" "array") (("CALL" ("GLOBAL" "vegas" "Symbol") (("CONST" #nil) ("CONST" "do"))))) ("CALL" ("GLOBAL" "test" "rest") (("LOCAL" 1 2))))))) ("CALL" ("GLOBAL" "vegas" "array") (("CALL" ("GLOBAL" "vegas" "concat") (("CALL" ("GLOBAL" "vegas" "array") (("CALL" ("GLOBAL" "vegas" "Symbol") (("CONST" #nil) ("CONST" "cond"))))) ("LOCAL" 1 3)))))))))) ("RETURN" ("LOCAL" 1 0))))) ("RETURN" ("LOCAL" 0 0)))
+
+[EMIT_MACRO]
+function anonymous(RT) {
+
+var local_0_0;
+local_0_0 = function(arg_1_0, arg_1_1, arg_1_2) {
+    var local_1_0, local_1_1, local_1_2, local_1_3;
+    local_1_1 = RT["vegas::="](RT["test::len"](arg_1_0), 1);
+    if (local_1_1 != null && local_1_1 !== false) {
+        local_1_0 = null;
+    } else {
+        local_1_2 = RT["test::second"](arg_1_0);
+        local_1_3 = RT["test::drop"](2, arg_1_0);
+        local_1_0 = RT["vegas::concat"](RT["vegas::array"](RT["vegas::Symbol"](null, "if")), RT["vegas::array"](RT["test::first"](local_1_2)), RT["vegas::array"](RT["vegas::concat"](RT["vegas::array"](RT["vegas::Symbol"](null, "do")), RT["test::rest"](local_1_2))), RT["vegas::array"](RT["vegas::concat"](RT["vegas::array"](RT["vegas::Symbol"](null, "cond")), local_1_3)));
+    };
+    return local_1_0;
+};
+return local_0_0;
+}
+[READ SEXP]
+(define-macro* or (fn* (sexp e1 e2) (if (= (len sexp) 1) #nil (if (= (len sexp) 2) (second sexp) (let ((x (second sexp)) (xs (drop 2 sexp))) (vegas::quasiquote (let ((tmp (vegas::unquote x))) (if tmp tmp (or (vegas::unquote-splicing xs))))))))))
+
+[EXPAND SEXP]
+("DEFINE_MACRO" or (vegas::fn* (sexp e1 e2) (vegas::if (vegas::= (test::len sexp) 1) #nil (vegas::if (vegas::= (test::len sexp) 2) (test::second sexp) (vegas::let ((x (test::second sexp)) (xs (test::drop 2 sexp))) (vegas::concat (vegas::array (vegas::Symbol #nil "let")) (vegas::array (vegas::concat (vegas::array (vegas::concat (vegas::array (vegas::Symbol #nil "tmp")) (vegas::array x))))) (vegas::array (vegas::concat (vegas::array (vegas::Symbol #nil "if")) (vegas::array (vegas::Symbol #nil "tmp")) (vegas::array (vegas::Symbol #nil "tmp")) (vegas::array (vegas::concat (vegas::array (vegas::Symbol #nil "or")) xs))))))))))
+
+[NORMALIZE]
+("FUN" (("LOCAL" "sexp") ("LOCAL" "e1") ("LOCAL" "e2")) ("IF" ("CALL" ("GLOBAL" "vegas" "=") (("CALL" ("GLOBAL" "test" "len") (("LOCAL" "sexp"))) ("CONST" 1))) ("CONST" #nil) ("IF" ("CALL" ("GLOBAL" "vegas" "=") (("CALL" ("GLOBAL" "test" "len") (("LOCAL" "sexp"))) ("CONST" 2))) ("CALL" ("GLOBAL" "test" "second") (("LOCAL" "sexp"))) ("LET" ((("LOCAL" "x") ("CALL" ("GLOBAL" "test" "second") (("LOCAL" "sexp")))) (("LOCAL" "xs") ("CALL" ("GLOBAL" "test" "drop") (("CONST" 2) ("LOCAL" "sexp"))))) ("CALL" ("GLOBAL" "vegas" "concat") (("CALL" ("GLOBAL" "vegas" "array") (("CALL" ("GLOBAL" "vegas" "Symbol") (("CONST" #nil) ("CONST" "let"))))) ("CALL" ("GLOBAL" "vegas" "array") (("CALL" ("GLOBAL" "vegas" "concat") (("CALL" ("GLOBAL" "vegas" "array") (("CALL" ("GLOBAL" "vegas" "concat") (("CALL" ("GLOBAL" "vegas" "array") (("CALL" ("GLOBAL" "vegas" "Symbol") (("CONST" #nil) ("CONST" "tmp"))))) ("CALL" ("GLOBAL" "vegas" "array") (("LOCAL" "x"))))))))))) ("CALL" ("GLOBAL" "vegas" "array") (("CALL" ("GLOBAL" "vegas" "concat") (("CALL" ("GLOBAL" "vegas" "array") (("CALL" ("GLOBAL" "vegas" "Symbol") (("CONST" #nil) ("CONST" "if"))))) ("CALL" ("GLOBAL" "vegas" "array") (("CALL" ("GLOBAL" "vegas" "Symbol") (("CONST" #nil) ("CONST" "tmp"))))) ("CALL" ("GLOBAL" "vegas" "array") (("CALL" ("GLOBAL" "vegas" "Symbol") (("CONST" #nil) ("CONST" "tmp"))))) ("CALL" ("GLOBAL" "vegas" "array") (("CALL" ("GLOBAL" "vegas" "concat") (("CALL" ("GLOBAL" "vegas" "array") (("CALL" ("GLOBAL" "vegas" "Symbol") (("CONST" #nil) ("CONST" "or"))))) ("LOCAL" "xs")))))))))))))))
+
+[COMPILE_MACRO]
+(("DECLARE" 0 1) ("SET" ("LOCAL" 0 0) ("FUN" (("ARG" 1 0) ("ARG" 1 1) ("ARG" 1 2)) (("DECLARE" 1 5) ("SET" ("LOCAL" 1 1) ("CALL" ("GLOBAL" "vegas" "=") (("CALL" ("GLOBAL" "test" "len") (("ARG" 1 0))) ("CONST" 1)))) ("IF" ("LOCAL" 1 1) (("SET" ("LOCAL" 1 0) ("CONST" #nil))) (("SET" ("LOCAL" 1 2) ("CALL" ("GLOBAL" "vegas" "=") (("CALL" ("GLOBAL" "test" "len") (("ARG" 1 0))) ("CONST" 2)))) ("IF" ("LOCAL" 1 2) (("SET" ("LOCAL" 1 0) ("CALL" ("GLOBAL" "test" "second") (("ARG" 1 0))))) (("SET" ("LOCAL" 1 3) ("CALL" ("GLOBAL" "test" "second") (("ARG" 1 0)))) ("SET" ("LOCAL" 1 4) ("CALL" ("GLOBAL" "test" "drop") (("CONST" 2) ("ARG" 1 0)))) ("SET" ("LOCAL" 1 0) ("CALL" ("GLOBAL" "vegas" "concat") (("CALL" ("GLOBAL" "vegas" "array") (("CALL" ("GLOBAL" "vegas" "Symbol") (("CONST" #nil) ("CONST" "let"))))) ("CALL" ("GLOBAL" "vegas" "array") (("CALL" ("GLOBAL" "vegas" "concat") (("CALL" ("GLOBAL" "vegas" "array") (("CALL" ("GLOBAL" "vegas" "concat") (("CALL" ("GLOBAL" "vegas" "array") (("CALL" ("GLOBAL" "vegas" "Symbol") (("CONST" #nil) ("CONST" "tmp"))))) ("CALL" ("GLOBAL" "vegas" "array") (("LOCAL" 1 3))))))))))) ("CALL" ("GLOBAL" "vegas" "array") (("CALL" ("GLOBAL" "vegas" "concat") (("CALL" ("GLOBAL" "vegas" "array") (("CALL" ("GLOBAL" "vegas" "Symbol") (("CONST" #nil) ("CONST" "if"))))) ("CALL" ("GLOBAL" "vegas" "array") (("CALL" ("GLOBAL" "vegas" "Symbol") (("CONST" #nil) ("CONST" "tmp"))))) ("CALL" ("GLOBAL" "vegas" "array") (("CALL" ("GLOBAL" "vegas" "Symbol") (("CONST" #nil) ("CONST" "tmp"))))) ("CALL" ("GLOBAL" "vegas" "array") (("CALL" ("GLOBAL" "vegas" "concat") (("CALL" ("GLOBAL" "vegas" "array") (("CALL" ("GLOBAL" "vegas" "Symbol") (("CONST" #nil) ("CONST" "or"))))) ("LOCAL" 1 4)))))))))))))))) ("RETURN" ("LOCAL" 1 0))))) ("RETURN" ("LOCAL" 0 0)))
+
+[EMIT_MACRO]
+function anonymous(RT) {
+
+var local_0_0;
+local_0_0 = function(arg_1_0, arg_1_1, arg_1_2) {
+    var local_1_0, local_1_1, local_1_2, local_1_3, local_1_4;
+    local_1_1 = RT["vegas::="](RT["test::len"](arg_1_0), 1);
+    if (local_1_1 != null && local_1_1 !== false) {
+        local_1_0 = null;
+    } else {
+        local_1_2 = RT["vegas::="](RT["test::len"](arg_1_0), 2);
+        if (local_1_2 != null && local_1_2 !== false) {
+            local_1_0 = RT["test::second"](arg_1_0);
+        } else {
+            local_1_3 = RT["test::second"](arg_1_0);
+            local_1_4 = RT["test::drop"](2, arg_1_0);
+            local_1_0 = RT["vegas::concat"](RT["vegas::array"](RT["vegas::Symbol"](null, "let")), RT["vegas::array"](RT["vegas::concat"](RT["vegas::array"](RT["vegas::concat"](RT["vegas::array"](RT["vegas::Symbol"](null, "tmp")), RT["vegas::array"](local_1_3))))), RT["vegas::array"](RT["vegas::concat"](RT["vegas::array"](RT["vegas::Symbol"](null, "if")), RT["vegas::array"](RT["vegas::Symbol"](null, "tmp")), RT["vegas::array"](RT["vegas::Symbol"](null, "tmp")), RT["vegas::array"](RT["vegas::concat"](RT["vegas::array"](RT["vegas::Symbol"](null, "or")), local_1_4)))));
+        };
+    };
+    return local_1_0;
+};
+return local_0_0;
+}
+[READ SEXP]
+(define-macro* and (fn* (sexp e1 e2) (if (= (len sexp) 1) #nil (if (= (len sexp) 2) (second sexp) (let ((x (second sexp)) (xs (drop 2 sexp))) (vegas::quasiquote (let ((tmp (vegas::unquote x))) (if tmp (and (vegas::unquote-splicing xs)) tmp))))))))
+
+[EXPAND SEXP]
+("DEFINE_MACRO" and (vegas::fn* (sexp e1 e2) (vegas::if (vegas::= (test::len sexp) 1) #nil (vegas::if (vegas::= (test::len sexp) 2) (test::second sexp) (vegas::let ((x (test::second sexp)) (xs (test::drop 2 sexp))) (vegas::concat (vegas::array (vegas::Symbol #nil "let")) (vegas::array (vegas::concat (vegas::array (vegas::concat (vegas::array (vegas::Symbol #nil "tmp")) (vegas::array x))))) (vegas::array (vegas::concat (vegas::array (vegas::Symbol #nil "if")) (vegas::array (vegas::Symbol #nil "tmp")) (vegas::array (vegas::concat (vegas::array (vegas::Symbol #nil "and")) xs)) (vegas::array (vegas::Symbol #nil "tmp"))))))))))
+
+[NORMALIZE]
+("FUN" (("LOCAL" "sexp") ("LOCAL" "e1") ("LOCAL" "e2")) ("IF" ("CALL" ("GLOBAL" "vegas" "=") (("CALL" ("GLOBAL" "test" "len") (("LOCAL" "sexp"))) ("CONST" 1))) ("CONST" #nil) ("IF" ("CALL" ("GLOBAL" "vegas" "=") (("CALL" ("GLOBAL" "test" "len") (("LOCAL" "sexp"))) ("CONST" 2))) ("CALL" ("GLOBAL" "test" "second") (("LOCAL" "sexp"))) ("LET" ((("LOCAL" "x") ("CALL" ("GLOBAL" "test" "second") (("LOCAL" "sexp")))) (("LOCAL" "xs") ("CALL" ("GLOBAL" "test" "drop") (("CONST" 2) ("LOCAL" "sexp"))))) ("CALL" ("GLOBAL" "vegas" "concat") (("CALL" ("GLOBAL" "vegas" "array") (("CALL" ("GLOBAL" "vegas" "Symbol") (("CONST" #nil) ("CONST" "let"))))) ("CALL" ("GLOBAL" "vegas" "array") (("CALL" ("GLOBAL" "vegas" "concat") (("CALL" ("GLOBAL" "vegas" "array") (("CALL" ("GLOBAL" "vegas" "concat") (("CALL" ("GLOBAL" "vegas" "array") (("CALL" ("GLOBAL" "vegas" "Symbol") (("CONST" #nil) ("CONST" "tmp"))))) ("CALL" ("GLOBAL" "vegas" "array") (("LOCAL" "x"))))))))))) ("CALL" ("GLOBAL" "vegas" "array") (("CALL" ("GLOBAL" "vegas" "concat") (("CALL" ("GLOBAL" "vegas" "array") (("CALL" ("GLOBAL" "vegas" "Symbol") (("CONST" #nil) ("CONST" "if"))))) ("CALL" ("GLOBAL" "vegas" "array") (("CALL" ("GLOBAL" "vegas" "Symbol") (("CONST" #nil) ("CONST" "tmp"))))) ("CALL" ("GLOBAL" "vegas" "array") (("CALL" ("GLOBAL" "vegas" "concat") (("CALL" ("GLOBAL" "vegas" "array") (("CALL" ("GLOBAL" "vegas" "Symbol") (("CONST" #nil) ("CONST" "and"))))) ("LOCAL" "xs"))))) ("CALL" ("GLOBAL" "vegas" "array") (("CALL" ("GLOBAL" "vegas" "Symbol") (("CONST" #nil) ("CONST" "tmp")))))))))))))))
+
+[COMPILE_MACRO]
+(("DECLARE" 0 1) ("SET" ("LOCAL" 0 0) ("FUN" (("ARG" 1 0) ("ARG" 1 1) ("ARG" 1 2)) (("DECLARE" 1 5) ("SET" ("LOCAL" 1 1) ("CALL" ("GLOBAL" "vegas" "=") (("CALL" ("GLOBAL" "test" "len") (("ARG" 1 0))) ("CONST" 1)))) ("IF" ("LOCAL" 1 1) (("SET" ("LOCAL" 1 0) ("CONST" #nil))) (("SET" ("LOCAL" 1 2) ("CALL" ("GLOBAL" "vegas" "=") (("CALL" ("GLOBAL" "test" "len") (("ARG" 1 0))) ("CONST" 2)))) ("IF" ("LOCAL" 1 2) (("SET" ("LOCAL" 1 0) ("CALL" ("GLOBAL" "test" "second") (("ARG" 1 0))))) (("SET" ("LOCAL" 1 3) ("CALL" ("GLOBAL" "test" "second") (("ARG" 1 0)))) ("SET" ("LOCAL" 1 4) ("CALL" ("GLOBAL" "test" "drop") (("CONST" 2) ("ARG" 1 0)))) ("SET" ("LOCAL" 1 0) ("CALL" ("GLOBAL" "vegas" "concat") (("CALL" ("GLOBAL" "vegas" "array") (("CALL" ("GLOBAL" "vegas" "Symbol") (("CONST" #nil) ("CONST" "let"))))) ("CALL" ("GLOBAL" "vegas" "array") (("CALL" ("GLOBAL" "vegas" "concat") (("CALL" ("GLOBAL" "vegas" "array") (("CALL" ("GLOBAL" "vegas" "concat") (("CALL" ("GLOBAL" "vegas" "array") (("CALL" ("GLOBAL" "vegas" "Symbol") (("CONST" #nil) ("CONST" "tmp"))))) ("CALL" ("GLOBAL" "vegas" "array") (("LOCAL" 1 3))))))))))) ("CALL" ("GLOBAL" "vegas" "array") (("CALL" ("GLOBAL" "vegas" "concat") (("CALL" ("GLOBAL" "vegas" "array") (("CALL" ("GLOBAL" "vegas" "Symbol") (("CONST" #nil) ("CONST" "if"))))) ("CALL" ("GLOBAL" "vegas" "array") (("CALL" ("GLOBAL" "vegas" "Symbol") (("CONST" #nil) ("CONST" "tmp"))))) ("CALL" ("GLOBAL" "vegas" "array") (("CALL" ("GLOBAL" "vegas" "concat") (("CALL" ("GLOBAL" "vegas" "array") (("CALL" ("GLOBAL" "vegas" "Symbol") (("CONST" #nil) ("CONST" "and"))))) ("LOCAL" 1 4))))) ("CALL" ("GLOBAL" "vegas" "array") (("CALL" ("GLOBAL" "vegas" "Symbol") (("CONST" #nil) ("CONST" "tmp")))))))))))))))) ("RETURN" ("LOCAL" 1 0))))) ("RETURN" ("LOCAL" 0 0)))
+
+[EMIT_MACRO]
+function anonymous(RT) {
+
+var local_0_0;
+local_0_0 = function(arg_1_0, arg_1_1, arg_1_2) {
+    var local_1_0, local_1_1, local_1_2, local_1_3, local_1_4;
+    local_1_1 = RT["vegas::="](RT["test::len"](arg_1_0), 1);
+    if (local_1_1 != null && local_1_1 !== false) {
+        local_1_0 = null;
+    } else {
+        local_1_2 = RT["vegas::="](RT["test::len"](arg_1_0), 2);
+        if (local_1_2 != null && local_1_2 !== false) {
+            local_1_0 = RT["test::second"](arg_1_0);
+        } else {
+            local_1_3 = RT["test::second"](arg_1_0);
+            local_1_4 = RT["test::drop"](2, arg_1_0);
+            local_1_0 = RT["vegas::concat"](RT["vegas::array"](RT["vegas::Symbol"](null, "let")), RT["vegas::array"](RT["vegas::concat"](RT["vegas::array"](RT["vegas::concat"](RT["vegas::array"](RT["vegas::Symbol"](null, "tmp")), RT["vegas::array"](local_1_3))))), RT["vegas::array"](RT["vegas::concat"](RT["vegas::array"](RT["vegas::Symbol"](null, "if")), RT["vegas::array"](RT["vegas::Symbol"](null, "tmp")), RT["vegas::array"](RT["vegas::concat"](RT["vegas::array"](RT["vegas::Symbol"](null, "and")), local_1_4)), RT["vegas::array"](RT["vegas::Symbol"](null, "tmp")))));
+        };
+    };
+    return local_1_0;
+};
+return local_0_0;
+}
+[READ SEXP]
+(define-macro* with-trace (fn* (sexp e1 e2) (let ((trace1 (fn* (sexp) (vegas::quasiquote (let ((result (vegas::unquote sexp))) (do (prn (vegas::quote (vegas::unquote sexp)) (vegas::quote =>) result) result))))) (clauses (.map (rest sexp) trace1))) (vegas::quasiquote (do (vegas::unquote-splicing clauses))))))
+
+[EXPAND SEXP]
+("DEFINE_MACRO" with-trace (vegas::fn* (sexp e1 e2) (vegas::let ((trace1 (vegas::fn* (sexp) (vegas::concat (vegas::array (vegas::Symbol #nil "let")) (vegas::array (vegas::concat (vegas::array (vegas::concat (vegas::array (vegas::Symbol #nil "result")) (vegas::array sexp))))) (vegas::array (vegas::concat (vegas::array (vegas::Symbol #nil "do")) (vegas::array (vegas::concat (vegas::array (vegas::Symbol #nil "prn")) (vegas::array (vegas::concat (vegas::array (vegas::Symbol "vegas" "quote")) (vegas::array sexp))) (vegas::array (vegas::concat (vegas::array (vegas::Symbol "vegas" "quote")) (vegas::array (vegas::Symbol #nil "=>")))) (vegas::array (vegas::Symbol #nil "result")))) (vegas::array (vegas::Symbol #nil "result"))))))) (clauses ((vegas::. (test::rest sexp) "map") trace1))) (vegas::concat (vegas::array (vegas::Symbol #nil "do")) clauses))))
+
+[NORMALIZE]
+("FUN" (("LOCAL" "sexp") ("LOCAL" "e1") ("LOCAL" "e2")) ("LET" ((("LOCAL" "trace1") ("FUN" (("LOCAL" "sexp")) ("CALL" ("GLOBAL" "vegas" "concat") (("CALL" ("GLOBAL" "vegas" "array") (("CALL" ("GLOBAL" "vegas" "Symbol") (("CONST" #nil) ("CONST" "let"))))) ("CALL" ("GLOBAL" "vegas" "array") (("CALL" ("GLOBAL" "vegas" "concat") (("CALL" ("GLOBAL" "vegas" "array") (("CALL" ("GLOBAL" "vegas" "concat") (("CALL" ("GLOBAL" "vegas" "array") (("CALL" ("GLOBAL" "vegas" "Symbol") (("CONST" #nil) ("CONST" "result"))))) ("CALL" ("GLOBAL" "vegas" "array") (("LOCAL" "sexp"))))))))))) ("CALL" ("GLOBAL" "vegas" "array") (("CALL" ("GLOBAL" "vegas" "concat") (("CALL" ("GLOBAL" "vegas" "array") (("CALL" ("GLOBAL" "vegas" "Symbol") (("CONST" #nil) ("CONST" "do"))))) ("CALL" ("GLOBAL" "vegas" "array") (("CALL" ("GLOBAL" "vegas" "concat") (("CALL" ("GLOBAL" "vegas" "array") (("CALL" ("GLOBAL" "vegas" "Symbol") (("CONST" #nil) ("CONST" "prn"))))) ("CALL" ("GLOBAL" "vegas" "array") (("CALL" ("GLOBAL" "vegas" "concat") (("CALL" ("GLOBAL" "vegas" "array") (("CALL" ("GLOBAL" "vegas" "Symbol") (("CONST" "vegas") ("CONST" "quote"))))) ("CALL" ("GLOBAL" "vegas" "array") (("LOCAL" "sexp"))))))) ("CALL" ("GLOBAL" "vegas" "array") (("CALL" ("GLOBAL" "vegas" "concat") (("CALL" ("GLOBAL" "vegas" "array") (("CALL" ("GLOBAL" "vegas" "Symbol") (("CONST" "vegas") ("CONST" "quote"))))) ("CALL" ("GLOBAL" "vegas" "array") (("CALL" ("GLOBAL" "vegas" "Symbol") (("CONST" #nil) ("CONST" "=>"))))))))) ("CALL" ("GLOBAL" "vegas" "array") (("CALL" ("GLOBAL" "vegas" "Symbol") (("CONST" #nil) ("CONST" "result"))))))))) ("CALL" ("GLOBAL" "vegas" "array") (("CALL" ("GLOBAL" "vegas" "Symbol") (("CONST" #nil) ("CONST" "result"))))))))))))) (("LOCAL" "clauses") ("CALL" ("PROPERTY" ("CALL" ("GLOBAL" "test" "rest") (("LOCAL" "sexp"))) ("CONST" "map")) (("LOCAL" "trace1"))))) ("CALL" ("GLOBAL" "vegas" "concat") (("CALL" ("GLOBAL" "vegas" "array") (("CALL" ("GLOBAL" "vegas" "Symbol") (("CONST" #nil) ("CONST" "do"))))) ("LOCAL" "clauses")))))
+
+[COMPILE_MACRO]
+(("DECLARE" 0 1) ("SET" ("LOCAL" 0 0) ("FUN" (("ARG" 1 0) ("ARG" 1 1) ("ARG" 1 2)) (("DECLARE" 1 3) ("SET" ("LOCAL" 1 1) ("FUN" (("ARG" 2 0)) (("DECLARE" 2 1) ("SET" ("LOCAL" 2 0) ("CALL" ("GLOBAL" "vegas" "concat") (("CALL" ("GLOBAL" "vegas" "array") (("CALL" ("GLOBAL" "vegas" "Symbol") (("CONST" #nil) ("CONST" "let"))))) ("CALL" ("GLOBAL" "vegas" "array") (("CALL" ("GLOBAL" "vegas" "concat") (("CALL" ("GLOBAL" "vegas" "array") (("CALL" ("GLOBAL" "vegas" "concat") (("CALL" ("GLOBAL" "vegas" "array") (("CALL" ("GLOBAL" "vegas" "Symbol") (("CONST" #nil) ("CONST" "result"))))) ("CALL" ("GLOBAL" "vegas" "array") (("ARG" 2 0))))))))))) ("CALL" ("GLOBAL" "vegas" "array") (("CALL" ("GLOBAL" "vegas" "concat") (("CALL" ("GLOBAL" "vegas" "array") (("CALL" ("GLOBAL" "vegas" "Symbol") (("CONST" #nil) ("CONST" "do"))))) ("CALL" ("GLOBAL" "vegas" "array") (("CALL" ("GLOBAL" "vegas" "concat") (("CALL" ("GLOBAL" "vegas" "array") (("CALL" ("GLOBAL" "vegas" "Symbol") (("CONST" #nil) ("CONST" "prn"))))) ("CALL" ("GLOBAL" "vegas" "array") (("CALL" ("GLOBAL" "vegas" "concat") (("CALL" ("GLOBAL" "vegas" "array") (("CALL" ("GLOBAL" "vegas" "Symbol") (("CONST" "vegas") ("CONST" "quote"))))) ("CALL" ("GLOBAL" "vegas" "array") (("ARG" 2 0))))))) ("CALL" ("GLOBAL" "vegas" "array") (("CALL" ("GLOBAL" "vegas" "concat") (("CALL" ("GLOBAL" "vegas" "array") (("CALL" ("GLOBAL" "vegas" "Symbol") (("CONST" "vegas") ("CONST" "quote"))))) ("CALL" ("GLOBAL" "vegas" "array") (("CALL" ("GLOBAL" "vegas" "Symbol") (("CONST" #nil) ("CONST" "=>"))))))))) ("CALL" ("GLOBAL" "vegas" "array") (("CALL" ("GLOBAL" "vegas" "Symbol") (("CONST" #nil) ("CONST" "result"))))))))) ("CALL" ("GLOBAL" "vegas" "array") (("CALL" ("GLOBAL" "vegas" "Symbol") (("CONST" #nil) ("CONST" "result")))))))))))) ("RETURN" ("LOCAL" 2 0))))) ("SET" ("LOCAL" 1 2) ("CALL" ("PROPERTY" ("CALL" ("GLOBAL" "test" "rest") (("ARG" 1 0))) ("CONST" "map")) (("LOCAL" 1 1)))) ("SET" ("LOCAL" 1 0) ("CALL" ("GLOBAL" "vegas" "concat") (("CALL" ("GLOBAL" "vegas" "array") (("CALL" ("GLOBAL" "vegas" "Symbol") (("CONST" #nil) ("CONST" "do"))))) ("LOCAL" 1 2)))) ("RETURN" ("LOCAL" 1 0))))) ("RETURN" ("LOCAL" 0 0)))
+
+[EMIT_MACRO]
+function anonymous(RT) {
+
+var local_0_0;
+local_0_0 = function(arg_1_0, arg_1_1, arg_1_2) {
+    var local_1_0, local_1_1, local_1_2;
+    local_1_1 = function(arg_2_0) {
+        var local_2_0;
+        local_2_0 = RT["vegas::concat"](RT["vegas::array"](RT["vegas::Symbol"](null, "let")), RT["vegas::array"](RT["vegas::concat"](RT["vegas::array"](RT["vegas::concat"](RT["vegas::array"](RT["vegas::Symbol"](null, "result")), RT["vegas::array"](arg_2_0))))), RT["vegas::array"](RT["vegas::concat"](RT["vegas::array"](RT["vegas::Symbol"](null, "do")), RT["vegas::array"](RT["vegas::concat"](RT["vegas::array"](RT["vegas::Symbol"](null, "prn")), RT["vegas::array"](RT["vegas::concat"](RT["vegas::array"](RT["vegas::Symbol"]("vegas", "quote")), RT["vegas::array"](arg_2_0))), RT["vegas::array"](RT["vegas::concat"](RT["vegas::array"](RT["vegas::Symbol"]("vegas", "quote")), RT["vegas::array"](RT["vegas::Symbol"](null, "=>")))), RT["vegas::array"](RT["vegas::Symbol"](null, "result")))), RT["vegas::array"](RT["vegas::Symbol"](null, "result")))));
+        return local_2_0;
+    };
+    local_1_2 = RT["test::rest"](arg_1_0)["map"](local_1_1);
+    local_1_0 = RT["vegas::concat"](RT["vegas::array"](RT["vegas::Symbol"](null, "do")), local_1_2);
     return local_1_0;
 };
 return local_0_0;
@@ -202,7 +388,7 @@ var local_0_0, local_0_1;
 local_0_0 = 0;
 block_0_0:for(;;) {
     local_0_1 = RT["vegas::<"](local_0_0, 10);
-    if(local_0_1) {
+    if (local_0_1 != null && local_0_1 !== false) {
         RT["vegas::prn"](RT["vegas::Keyword"]("counter"), local_0_0);
         local_0_0 = RT["vegas::+"](local_0_0, 1);
     } else {
@@ -224,4 +410,212 @@ block_0_0:for(;;) {
 
 [EMIT]
 RT["vegas::prn"](RT["vegas::concat"](RT["vegas::array"](RT["vegas::Keyword"]("a")), RT["vegas::array"](RT["vegas::array"](RT["vegas::Symbol"]("vegas", "quasiquote"), RT["vegas::array"](RT["vegas::Keyword"]("b"), RT["vegas::array"](RT["vegas::Symbol"]("vegas", "unquote"), RT["vegas::Keyword"]("c")), RT["vegas::array"](RT["vegas::Symbol"]("vegas", "unquote-splicing"), RT["vegas::Symbol"](null, "xs")))))));
+
+[READ SEXP]
+(define (match pat obj) (let ((fail (fn* () (return-from match #nil)))) (match* p x)))
+
+[MACROEXPAND1]
+(define (match pat obj) (let ((fail (fn* () (return-from match #nil)))) (match* p x)))
+(vegas::define* match (vegas::fn* (pat obj) (vegas::block match (let ((fail (fn* () (return-from match #nil)))) (match* p x)))))
+
+[EXPAND SEXP]
+("EXPRESSION" (vegas::set test::match (vegas::fn* (pat obj) (vegas::block match (vegas::let ((fail (vegas::fn* () (vegas::return-from match #nil)))) (test::match* test::p test::x))))))
+
+[NORMALIZE]
+("SET" ("GLOBAL" "test" "match") ("FUN" (("LOCAL" "pat") ("LOCAL" "obj")) ("BLOCK" ("LABEL" "#match") ("LET" ((("LOCAL" "fail") ("FUN" () ("RETURN_FROM" ("LABEL" "#match") ("CONST" #nil))))) ("CALL" ("GLOBAL" "test" "match*") (("GLOBAL" "test" "p") ("GLOBAL" "test" "x")))))))
+
+[COMPILE]
+(("SET" ("GLOBAL" "test" "match") ("FUN" (("ARG" 1 0) ("ARG" 1 1)) (("DECLARE" 1 2) ("BLOCK" ("LABEL" 1 0 #t ) (("SET" ("LOCAL" 1 1) ("FUN" () (("DECLARE" 2 1) ("SET" ("LOCAL" 1 0) ("CONST" #nil)) ("NON_LOCAL_EXIT" ("LABEL" 1 0 #t )) ("RETURN" ("LOCAL" 2 0))))) ("SET" ("LOCAL" 1 0) ("CALL" ("GLOBAL" "test" "match*") (("GLOBAL" "test" "p") ("GLOBAL" "test" "x")))))) ("RETURN" ("LOCAL" 1 0))))))
+
+[EMIT]
+RT["test::match"] = function(arg_1_0, arg_1_1) {
+    var local_1_0, local_1_1;
+    var flag_1_0 = true;
+    try {
+        block_1_0: {
+            local_1_1 = function() {
+                var local_2_0;
+                local_1_0 = null;
+                flag_1_0 = false; throw "NON_LOCAL_EXIT";
+                return local_2_0;
+            };
+            local_1_0 = RT["test::match*"](RT["test::p"], RT["test::x"]);
+        }
+    } catch (e) {
+        if (flag_1_0) {
+            throw e;
+        }
+    } finally {
+        flag_1_0 = false
+    };
+    return local_1_0;
+};
+
+[READ SEXP]
+(prn (or #nil #f 0 ""))
+
+[MACROEXPAND1]
+(or #nil #f 0 "")
+(let ((tmp #nil)) (if tmp tmp (or #f 0 "")))
+
+[MACROEXPAND1]
+(or #f 0 "")
+(let ((tmp #f)) (if tmp tmp (or 0 "")))
+
+[MACROEXPAND1]
+(or 0 "")
+(let ((tmp 0)) (if tmp tmp (or "")))
+
+[MACROEXPAND1]
+(or "")
+""
+
+[EXPAND SEXP]
+("EXPRESSION" (vegas::prn (vegas::let ((tmp #nil)) (vegas::if tmp tmp (vegas::let ((tmp #f)) (vegas::if tmp tmp (vegas::let ((tmp 0)) (vegas::if tmp tmp ""))))))))
+
+[NORMALIZE]
+("CALL" ("GLOBAL" "vegas" "prn") (("LET" ((("LOCAL" "tmp") ("CONST" #nil))) ("IF" ("LOCAL" "tmp") ("LOCAL" "tmp") ("LET" ((("LOCAL" "tmp") ("CONST" #f))) ("IF" ("LOCAL" "tmp") ("LOCAL" "tmp") ("LET" ((("LOCAL" "tmp") ("CONST" 0))) ("IF" ("LOCAL" "tmp") ("LOCAL" "tmp") ("CONST" "")))))))))
+
+[COMPILE]
+(("DECLARE" 0 7) ("SET" ("LOCAL" 0 1) ("CONST" #nil)) ("SET" ("LOCAL" 0 2) ("LOCAL" 0 1)) ("IF" ("LOCAL" 0 2) (("SET" ("LOCAL" 0 0) ("LOCAL" 0 1))) (("SET" ("LOCAL" 0 3) ("CONST" #f)) ("SET" ("LOCAL" 0 4) ("LOCAL" 0 3)) ("IF" ("LOCAL" 0 4) (("SET" ("LOCAL" 0 0) ("LOCAL" 0 3))) (("SET" ("LOCAL" 0 5) ("CONST" 0)) ("SET" ("LOCAL" 0 6) ("LOCAL" 0 5)) ("IF" ("LOCAL" 0 6) (("SET" ("LOCAL" 0 0) ("LOCAL" 0 5))) (("SET" ("LOCAL" 0 0) ("CONST" "")))))))) ("CALL" ("GLOBAL" "vegas" "prn") (("LOCAL" 0 0))))
+
+[EMIT]
+var local_0_0, local_0_1, local_0_2, local_0_3, local_0_4, local_0_5, local_0_6;
+local_0_1 = null;
+local_0_2 = local_0_1;
+if (local_0_2 != null && local_0_2 !== false) {
+    local_0_0 = local_0_1;
+} else {
+    local_0_3 = false;
+    local_0_4 = local_0_3;
+    if (local_0_4 != null && local_0_4 !== false) {
+        local_0_0 = local_0_3;
+    } else {
+        local_0_5 = 0;
+        local_0_6 = local_0_5;
+        if (local_0_6 != null && local_0_6 !== false) {
+            local_0_0 = local_0_5;
+        } else {
+            local_0_0 = "";
+        };
+    };
+};
+RT["vegas::prn"](local_0_0);
+
+[READ SEXP]
+(prn (and 0 "" #t 42))
+
+[MACROEXPAND1]
+(and 0 "" #t 42)
+(let ((tmp 0)) (if tmp (and "" #t 42) tmp))
+
+[MACROEXPAND1]
+(and "" #t 42)
+(let ((tmp "")) (if tmp (and #t 42) tmp))
+
+[MACROEXPAND1]
+(and #t 42)
+(let ((tmp #t)) (if tmp (and 42) tmp))
+
+[MACROEXPAND1]
+(and 42)
+42
+
+[EXPAND SEXP]
+("EXPRESSION" (vegas::prn (vegas::let ((tmp 0)) (vegas::if tmp (vegas::let ((tmp "")) (vegas::if tmp (vegas::let ((tmp #t)) (vegas::if tmp 42 tmp)) tmp)) tmp))))
+
+[NORMALIZE]
+("CALL" ("GLOBAL" "vegas" "prn") (("LET" ((("LOCAL" "tmp") ("CONST" 0))) ("IF" ("LOCAL" "tmp") ("LET" ((("LOCAL" "tmp") ("CONST" ""))) ("IF" ("LOCAL" "tmp") ("LET" ((("LOCAL" "tmp") ("CONST" #t))) ("IF" ("LOCAL" "tmp") ("CONST" 42) ("LOCAL" "tmp"))) ("LOCAL" "tmp"))) ("LOCAL" "tmp")))))
+
+[COMPILE]
+(("DECLARE" 0 7) ("SET" ("LOCAL" 0 1) ("CONST" 0)) ("SET" ("LOCAL" 0 2) ("LOCAL" 0 1)) ("IF" ("LOCAL" 0 2) (("SET" ("LOCAL" 0 3) ("CONST" "")) ("SET" ("LOCAL" 0 4) ("LOCAL" 0 3)) ("IF" ("LOCAL" 0 4) (("SET" ("LOCAL" 0 5) ("CONST" #t)) ("SET" ("LOCAL" 0 6) ("LOCAL" 0 5)) ("IF" ("LOCAL" 0 6) (("SET" ("LOCAL" 0 0) ("CONST" 42))) (("SET" ("LOCAL" 0 0) ("LOCAL" 0 5))))) (("SET" ("LOCAL" 0 0) ("LOCAL" 0 3))))) (("SET" ("LOCAL" 0 0) ("LOCAL" 0 1)))) ("CALL" ("GLOBAL" "vegas" "prn") (("LOCAL" 0 0))))
+
+[EMIT]
+var local_0_0, local_0_1, local_0_2, local_0_3, local_0_4, local_0_5, local_0_6;
+local_0_1 = 0;
+local_0_2 = local_0_1;
+if (local_0_2 != null && local_0_2 !== false) {
+    local_0_3 = "";
+    local_0_4 = local_0_3;
+    if (local_0_4 != null && local_0_4 !== false) {
+        local_0_5 = true;
+        local_0_6 = local_0_5;
+        if (local_0_6 != null && local_0_6 !== false) {
+            local_0_0 = 42;
+        } else {
+            local_0_0 = local_0_5;
+        };
+    } else {
+        local_0_0 = local_0_3;
+    };
+} else {
+    local_0_0 = local_0_1;
+};
+RT["vegas::prn"](local_0_0);
+
+[READ SEXP]
+(with-trace (drop 2 (array 1 2 3 4 5)) (take 2 (array 1 2 3 4 5)) (first (array 1 2 3 4 5)) (second (array 1 2 3 4 5)))
+
+[MACROEXPAND1]
+(with-trace (drop 2 (array 1 2 3 4 5)) (take 2 (array 1 2 3 4 5)) (first (array 1 2 3 4 5)) (second (array 1 2 3 4 5)))
+(do (let ((result (drop 2 (array 1 2 3 4 5)))) (do (prn (vegas::quote (drop 2 (array 1 2 3 4 5))) (vegas::quote =>) result) result)) (let ((result (take 2 (array 1 2 3 4 5)))) (do (prn (vegas::quote (take 2 (array 1 2 3 4 5))) (vegas::quote =>) result) result)) (let ((result (first (array 1 2 3 4 5)))) (do (prn (vegas::quote (first (array 1 2 3 4 5))) (vegas::quote =>) result) result)) (let ((result (second (array 1 2 3 4 5)))) (do (prn (vegas::quote (second (array 1 2 3 4 5))) (vegas::quote =>) result) result)))
+
+[EXPAND SEXP]
+("EXPRESSION" (vegas::let ((result (test::drop 2 (vegas::array 1 2 3 4 5)))) (vegas::do ((vegas::prn (vegas::array (vegas::Symbol #nil "drop") 2 (vegas::array (vegas::Symbol #nil "array") 1 2 3 4 5)) (vegas::Symbol #nil "=>") result) result))))
+
+[NORMALIZE]
+("LET" ((("LOCAL" "result") ("CALL" ("GLOBAL" "test" "drop") (("CONST" 2) ("CALL" ("GLOBAL" "vegas" "array") (("CONST" 1) ("CONST" 2) ("CONST" 3) ("CONST" 4) ("CONST" 5))))))) ("DO" (("CALL" ("GLOBAL" "vegas" "prn") (("CALL" ("GLOBAL" "vegas" "array") (("CALL" ("GLOBAL" "vegas" "Symbol") (("CONST" #nil) ("CONST" "drop"))) ("CONST" 2) ("CALL" ("GLOBAL" "vegas" "array") (("CALL" ("GLOBAL" "vegas" "Symbol") (("CONST" #nil) ("CONST" "array"))) ("CONST" 1) ("CONST" 2) ("CONST" 3) ("CONST" 4) ("CONST" 5))))) ("CALL" ("GLOBAL" "vegas" "Symbol") (("CONST" #nil) ("CONST" "=>"))) ("LOCAL" "result"))) ("LOCAL" "result"))))
+
+[COMPILE]
+(("DECLARE" 0 1) ("SET" ("LOCAL" 0 0) ("CALL" ("GLOBAL" "test" "drop") (("CONST" 2) ("CALL" ("GLOBAL" "vegas" "array") (("CONST" 1) ("CONST" 2) ("CONST" 3) ("CONST" 4) ("CONST" 5)))))) ("CALL" ("GLOBAL" "vegas" "prn") (("CALL" ("GLOBAL" "vegas" "array") (("CALL" ("GLOBAL" "vegas" "Symbol") (("CONST" #nil) ("CONST" "drop"))) ("CONST" 2) ("CALL" ("GLOBAL" "vegas" "array") (("CALL" ("GLOBAL" "vegas" "Symbol") (("CONST" #nil) ("CONST" "array"))) ("CONST" 1) ("CONST" 2) ("CONST" 3) ("CONST" 4) ("CONST" 5))))) ("CALL" ("GLOBAL" "vegas" "Symbol") (("CONST" #nil) ("CONST" "=>"))) ("LOCAL" 0 0))))
+
+[EMIT]
+var local_0_0;
+local_0_0 = RT["test::drop"](2, RT["vegas::array"](1, 2, 3, 4, 5));
+RT["vegas::prn"](RT["vegas::array"](RT["vegas::Symbol"](null, "drop"), 2, RT["vegas::array"](RT["vegas::Symbol"](null, "array"), 1, 2, 3, 4, 5)), RT["vegas::Symbol"](null, "=>"), local_0_0);
+
+
+[EXPAND SEXP]
+("EXPRESSION" (vegas::let ((result (test::take 2 (vegas::array 1 2 3 4 5)))) (vegas::do ((vegas::prn (vegas::array (vegas::Symbol #nil "take") 2 (vegas::array (vegas::Symbol #nil "array") 1 2 3 4 5)) (vegas::Symbol #nil "=>") result) result))))
+
+[NORMALIZE]
+("LET" ((("LOCAL" "result") ("CALL" ("GLOBAL" "test" "take") (("CONST" 2) ("CALL" ("GLOBAL" "vegas" "array") (("CONST" 1) ("CONST" 2) ("CONST" 3) ("CONST" 4) ("CONST" 5))))))) ("DO" (("CALL" ("GLOBAL" "vegas" "prn") (("CALL" ("GLOBAL" "vegas" "array") (("CALL" ("GLOBAL" "vegas" "Symbol") (("CONST" #nil) ("CONST" "take"))) ("CONST" 2) ("CALL" ("GLOBAL" "vegas" "array") (("CALL" ("GLOBAL" "vegas" "Symbol") (("CONST" #nil) ("CONST" "array"))) ("CONST" 1) ("CONST" 2) ("CONST" 3) ("CONST" 4) ("CONST" 5))))) ("CALL" ("GLOBAL" "vegas" "Symbol") (("CONST" #nil) ("CONST" "=>"))) ("LOCAL" "result"))) ("LOCAL" "result"))))
+
+[COMPILE]
+(("DECLARE" 0 1) ("SET" ("LOCAL" 0 0) ("CALL" ("GLOBAL" "test" "take") (("CONST" 2) ("CALL" ("GLOBAL" "vegas" "array") (("CONST" 1) ("CONST" 2) ("CONST" 3) ("CONST" 4) ("CONST" 5)))))) ("CALL" ("GLOBAL" "vegas" "prn") (("CALL" ("GLOBAL" "vegas" "array") (("CALL" ("GLOBAL" "vegas" "Symbol") (("CONST" #nil) ("CONST" "take"))) ("CONST" 2) ("CALL" ("GLOBAL" "vegas" "array") (("CALL" ("GLOBAL" "vegas" "Symbol") (("CONST" #nil) ("CONST" "array"))) ("CONST" 1) ("CONST" 2) ("CONST" 3) ("CONST" 4) ("CONST" 5))))) ("CALL" ("GLOBAL" "vegas" "Symbol") (("CONST" #nil) ("CONST" "=>"))) ("LOCAL" 0 0))))
+
+[EMIT]
+var local_0_0;
+local_0_0 = RT["test::take"](2, RT["vegas::array"](1, 2, 3, 4, 5));
+RT["vegas::prn"](RT["vegas::array"](RT["vegas::Symbol"](null, "take"), 2, RT["vegas::array"](RT["vegas::Symbol"](null, "array"), 1, 2, 3, 4, 5)), RT["vegas::Symbol"](null, "=>"), local_0_0);
+
+
+[EXPAND SEXP]
+("EXPRESSION" (vegas::let ((result (test::first (vegas::array 1 2 3 4 5)))) (vegas::do ((vegas::prn (vegas::array (vegas::Symbol #nil "first") (vegas::array (vegas::Symbol #nil "array") 1 2 3 4 5)) (vegas::Symbol #nil "=>") result) result))))
+
+[NORMALIZE]
+("LET" ((("LOCAL" "result") ("CALL" ("GLOBAL" "test" "first") (("CALL" ("GLOBAL" "vegas" "array") (("CONST" 1) ("CONST" 2) ("CONST" 3) ("CONST" 4) ("CONST" 5))))))) ("DO" (("CALL" ("GLOBAL" "vegas" "prn") (("CALL" ("GLOBAL" "vegas" "array") (("CALL" ("GLOBAL" "vegas" "Symbol") (("CONST" #nil) ("CONST" "first"))) ("CALL" ("GLOBAL" "vegas" "array") (("CALL" ("GLOBAL" "vegas" "Symbol") (("CONST" #nil) ("CONST" "array"))) ("CONST" 1) ("CONST" 2) ("CONST" 3) ("CONST" 4) ("CONST" 5))))) ("CALL" ("GLOBAL" "vegas" "Symbol") (("CONST" #nil) ("CONST" "=>"))) ("LOCAL" "result"))) ("LOCAL" "result"))))
+
+[COMPILE]
+(("DECLARE" 0 1) ("SET" ("LOCAL" 0 0) ("CALL" ("GLOBAL" "test" "first") (("CALL" ("GLOBAL" "vegas" "array") (("CONST" 1) ("CONST" 2) ("CONST" 3) ("CONST" 4) ("CONST" 5)))))) ("CALL" ("GLOBAL" "vegas" "prn") (("CALL" ("GLOBAL" "vegas" "array") (("CALL" ("GLOBAL" "vegas" "Symbol") (("CONST" #nil) ("CONST" "first"))) ("CALL" ("GLOBAL" "vegas" "array") (("CALL" ("GLOBAL" "vegas" "Symbol") (("CONST" #nil) ("CONST" "array"))) ("CONST" 1) ("CONST" 2) ("CONST" 3) ("CONST" 4) ("CONST" 5))))) ("CALL" ("GLOBAL" "vegas" "Symbol") (("CONST" #nil) ("CONST" "=>"))) ("LOCAL" 0 0))))
+
+[EMIT]
+var local_0_0;
+local_0_0 = RT["test::first"](RT["vegas::array"](1, 2, 3, 4, 5));
+RT["vegas::prn"](RT["vegas::array"](RT["vegas::Symbol"](null, "first"), RT["vegas::array"](RT["vegas::Symbol"](null, "array"), 1, 2, 3, 4, 5)), RT["vegas::Symbol"](null, "=>"), local_0_0);
+
+
+[EXPAND SEXP]
+("EXPRESSION" (vegas::let ((result (test::second (vegas::array 1 2 3 4 5)))) (vegas::do ((vegas::prn (vegas::array (vegas::Symbol #nil "second") (vegas::array (vegas::Symbol #nil "array") 1 2 3 4 5)) (vegas::Symbol #nil "=>") result) result))))
+
+[NORMALIZE]
+("LET" ((("LOCAL" "result") ("CALL" ("GLOBAL" "test" "second") (("CALL" ("GLOBAL" "vegas" "array") (("CONST" 1) ("CONST" 2) ("CONST" 3) ("CONST" 4) ("CONST" 5))))))) ("DO" (("CALL" ("GLOBAL" "vegas" "prn") (("CALL" ("GLOBAL" "vegas" "array") (("CALL" ("GLOBAL" "vegas" "Symbol") (("CONST" #nil) ("CONST" "second"))) ("CALL" ("GLOBAL" "vegas" "array") (("CALL" ("GLOBAL" "vegas" "Symbol") (("CONST" #nil) ("CONST" "array"))) ("CONST" 1) ("CONST" 2) ("CONST" 3) ("CONST" 4) ("CONST" 5))))) ("CALL" ("GLOBAL" "vegas" "Symbol") (("CONST" #nil) ("CONST" "=>"))) ("LOCAL" "result"))) ("LOCAL" "result"))))
+
+[COMPILE]
+(("DECLARE" 0 1) ("SET" ("LOCAL" 0 0) ("CALL" ("GLOBAL" "test" "second") (("CALL" ("GLOBAL" "vegas" "array") (("CONST" 1) ("CONST" 2) ("CONST" 3) ("CONST" 4) ("CONST" 5)))))) ("CALL" ("GLOBAL" "vegas" "prn") (("CALL" ("GLOBAL" "vegas" "array") (("CALL" ("GLOBAL" "vegas" "Symbol") (("CONST" #nil) ("CONST" "second"))) ("CALL" ("GLOBAL" "vegas" "array") (("CALL" ("GLOBAL" "vegas" "Symbol") (("CONST" #nil) ("CONST" "array"))) ("CONST" 1) ("CONST" 2) ("CONST" 3) ("CONST" 4) ("CONST" 5))))) ("CALL" ("GLOBAL" "vegas" "Symbol") (("CONST" #nil) ("CONST" "=>"))) ("LOCAL" 0 0))))
+
+[EMIT]
+var local_0_0;
+local_0_0 = RT["test::second"](RT["vegas::array"](1, 2, 3, 4, 5));
+RT["vegas::prn"](RT["vegas::array"](RT["vegas::Symbol"](null, "second"), RT["vegas::array"](RT["vegas::Symbol"](null, "array"), 1, 2, 3, 4, 5)), RT["vegas::Symbol"](null, "=>"), local_0_0);
 
